@@ -1,0 +1,40 @@
+{
+  "spec_version": "v6",
+  "event_id": "evt_0192f900_8a1b_7c00_9000_112233445566",
+  "topic": "topic.clipboard.broadcast",
+  "event_type": "EVENT_CLIPBOARD_BROADCAST",
+  "timestamp_ms": 1762310000123,
+  "source_device": {
+    "device_id": "dev_b_laptop",
+    "device_name": "Computer-B",
+    "os": "windows",
+    "lan_endpoint": "192.168.1.11:8443"
+  },
+  "target_scope": {
+    "mode": "BROADCAST",
+    "target_device_ids": ["*"]
+  },
+  "payload": {
+    "content_category": "FILE",
+    "digest": {
+      "algorithm": "blake3",
+      "full_hash": "4a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b",
+      "chunk_size_bytes": 4194304,
+      "chunk_hashes": [
+        "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+      ]
+    },
+    "inline_data": null,
+    "file_cache_id": "fc_20261105_99887766",
+    "upload_state": "STREAMING",
+    "items_meta": [
+      {
+        "name": "AI教程.docx",
+        "is_dir": false,
+        "size_bytes": 1548290,
+        "mtime": 1762309950
+      }
+    ],
+    "destination_override": null
+  }
+}

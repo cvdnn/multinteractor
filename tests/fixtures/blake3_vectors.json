@@ -1,0 +1,16 @@
+{
+  "description": "Official BLAKE3 whole-payload and 4MB chunk digest test vectors",
+  "chunk_size_bytes": 4194304,
+  "vectors": [
+    {
+      "name": "empty_bytes",
+      "input_utf8": "",
+      "expected_blake3_hex": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+    },
+    {
+      "name": "utf8_text_artificial_intelligence",
+      "input_utf8": "人工智能",
+      "expected_blake3_hex": "ae371adcf2f986f226e656ff5f3da54b82224995b3a87346b790f2d46e0222ea"
+    }
+  ]
+}
