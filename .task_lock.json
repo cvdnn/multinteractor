@@ -1,0 +1,379 @@
+{
+  "active_task_id": null,
+  "locked_scopes": [],
+  "lock_acquired_at": null,
+  "updated_at": "2026-11-05T19:12:20+08:00",
+  "tasks": {
+    "TASK-01": {
+      "task_id": "TASK-01",
+      "name": "定义跨端协议契约与核心协议库 (mi-protocol)",
+      "milestone": "M1",
+      "depends_on": [],
+      "scopes": [
+        "client/crates/mi-protocol",
+        "server/app/models.py",
+        "tests/fixtures"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T17:58:55+08:00",
+      "completed_at": "2026-11-05T18:05:26+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-protocol/Cargo.toml": "8e10399623774a4333efe87b63e8f22032e91598187a01c72447290e396eb256",
+        "client/crates/mi-protocol/src/digest.rs": "a1a130c4ced3a126d9487e301e888f985aecf2cad189b0925822462676bececc",
+        "client/crates/mi-protocol/src/envelope.rs": "d80b500bd5615633c2b571d28e63cfdf3bdb018212785f5bebacc4aa75e51829",
+        "client/crates/mi-protocol/src/ipc.rs": "8fc41517ff10666cf9afffa3a27673ddb6c86ac0c3f81e91c46af1415f8c90a0",
+        "client/crates/mi-protocol/src/lib.rs": "e580d69d8ac3e754024492ff3657c145b632b3f47cf1ea7417fa84c41f186a8b",
+        "client/crates/mi-protocol/src/resume.rs": "8e299c2508090b13ab52fe67b334137fa5af2fb16650b67a884035fd35f79590",
+        "client/crates/mi-protocol/src/rpc.rs": "d60f0a53b4775da155205ebe5fda1e6985668814bf0e29674d8041094270d0fd",
+        "server/app/models.py": "b41735e427cf76e31ea73b1ae3d127536fd5b83b2ce68d1b9e01c745abe8eb51",
+        "tests/fixtures/blake3_vectors.json": "027d2315a8ceda790dce24aa979526c6ab7f1896279bd88a786797cdabea5f7f",
+        "tests/fixtures/envelope_v6_golden.json": "689fd711f264b2fcf87b2b0b455235bd56bc203c452f2a465c848aca38051c56",
+        "tests/fixtures/generate_malicious_tar.py": "e59ac30440298bb6472b50bdb0f747b8040b17f0eedbf792f126972abbc213aa"
+      },
+      "post_snapshot": {
+        "client/crates/mi-protocol/Cargo.toml": "8e10399623774a4333efe87b63e8f22032e91598187a01c72447290e396eb256",
+        "client/crates/mi-protocol/src/digest.rs": "fe96cd81f9caa85c7519c42c202c7e70765048bad4596d2add8f539b419e2504",
+        "client/crates/mi-protocol/src/envelope.rs": "215aaace1f4b9fb41f29869b6a8f2a4e3a16cc838e41231d90fbb07e6034c339",
+        "client/crates/mi-protocol/src/ipc.rs": "60c7e4efa638b3fa2bc1588cb34d5b001f548393f6418ba9f6facfb95512524b",
+        "client/crates/mi-protocol/src/lib.rs": "e580d69d8ac3e754024492ff3657c145b632b3f47cf1ea7417fa84c41f186a8b",
+        "client/crates/mi-protocol/src/resume.rs": "1d2c94b167f28a17648036ddd86fd15d3699b67f087e75ef718dbb555cb0f64e",
+        "client/crates/mi-protocol/src/rpc.rs": "d8a13f942f44de0adac81f41c0bb34170b8340ed716ad9a5bd5fd7df1eb39db6",
+        "server/app/models.py": "6c3ef74d6d94a7e36fcbb68dbffd06d144d0cf5c2ce829d84506984f5abe1e15",
+        "tests/fixtures/blake3_vectors.json": "fe5204b7e1f007ead33199c7d13f6831ecda00271d9c16d8ed0062e0496f084d",
+        "tests/fixtures/envelope_v6_golden.json": "689fd711f264b2fcf87b2b0b455235bd56bc203c452f2a465c848aca38051c56",
+        "tests/fixtures/generate_malicious_tar.py": "4b5e264a96989786933e70d9ebc723b1dd41cfd94a61824227dcb128f9a3c2c8",
+        "tests/fixtures/test_protocol_contract.py": "333e20344b2c5a1dd65d6cac16961e698d2010d25102751ed0e2716e0712e3fa"
+      }
+    },
+    "TASK-02": {
+      "task_id": "TASK-02",
+      "name": "实现云端客户端管理、Topic 订阅路由与 SQLite 日志审计",
+      "milestone": "M1",
+      "depends_on": [
+        "TASK-01"
+      ],
+      "scopes": [
+        "server/app/config.py",
+        "server/app/main.py",
+        "server/app/client_sub_manager.py",
+        "server/app/audit_logger.py",
+        "server/app/api/devices.py",
+        "server/app/api/audit.py",
+        "server/tests/conftest.py",
+        "server/tests/test_client_sub_manager.py",
+        "server/tests/test_audit_logger.py"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:05:27+08:00",
+      "completed_at": "2026-11-05T18:08:00+08:00",
+      "pre_snapshot": {
+        "server/app/config.py": "75ead3bbbad56e91a2247d6087f3903dae0e4ff1595cb4aac9e8eb376d0ca13f",
+        "server/app/main.py": "03c29d49c6d3154327d82d534236e0360bc1a2f22096dbc50a416f9487e21cca",
+        "server/app/client_sub_manager.py": "c5cafba074d501ede2630c4dab618b6b4140e9328af0a33f91b368270645c8f1",
+        "server/app/audit_logger.py": "7dc47c037469fe1196b6773e4e049328bfa80155090b305e35d0ac9df58c3f94",
+        "server/app/api/devices.py": "454d117e41c59a1614946bd468b8222d0af68e0cfa30126c09a9cb3abdf5b923",
+        "server/app/api/audit.py": "5fef4dcd078d8065d08db2c119817883357b7fa61318c6e511f5f7c8c3abd5e8",
+        "server/tests/conftest.py": "369cb81ebe8e0673cc57496383d657359ea60df55912c63df5b3906b2d2b2654",
+        "server/tests/test_client_sub_manager.py": "63a528d6794f62da4f60d546cb084f81a765afb7efd5e63567137b16dec328b1",
+        "server/tests/test_audit_logger.py": "d403414617de3270d38b87041c741485f264fd87d7ed476c81914a4ca7aa10ed"
+      },
+      "post_snapshot": {
+        "server/app/config.py": "e9e6d72adf89b1825dc66c961472f3711bda43d9cecb88843288baecf1125179",
+        "server/app/main.py": "654d4d00a7d27c63e1a55511a4ace4d61b3a2ce14acf911abab61272c5c8e204",
+        "server/app/client_sub_manager.py": "5156e3c9758935a09bab32c687b89616768c7864b522b56aa7ba33982d9f455d",
+        "server/app/audit_logger.py": "ff42d3fb931d477b2b11c10bfaf693243998f5c4cfe0adfdbe98b870e0ad0bb4",
+        "server/app/api/devices.py": "990e9134c92ad548ed91c3692fe4b4e8fe571a7a3fc0eec774b06fee2024337d",
+        "server/app/api/audit.py": "faf1f9a6f9254d55032d31c5ac6b9580dc5ab5cf532878c0915981b25fda3ccd",
+        "server/tests/conftest.py": "2f3904336a600537907e93ba358f18c0948dea47925fe465cd382a0e034518b3",
+        "server/tests/test_client_sub_manager.py": "d513783503c6407c4ee59a6235c07dd7293afc81676b2f2ce7e0cfb71c7a1c07",
+        "server/tests/test_audit_logger.py": "576b6edce30018aac093564fccf8667dbd55cf58ea484bd0c890b47229198739"
+      }
+    },
+    "TASK-03": {
+      "task_id": "TASK-03",
+      "name": "实现客户端常驻守护进程 (mi-daemon) 与本地事件缓存列表",
+      "milestone": "M1",
+      "depends_on": [
+        "TASK-01",
+        "TASK-02"
+      ],
+      "scopes": [
+        "client/crates/mi-daemon/src/main.rs",
+        "client/crates/mi-daemon/src/lib.rs",
+        "client/crates/mi-daemon/src/config.rs",
+        "client/crates/mi-daemon/src/cloud_client.rs",
+        "client/crates/mi-daemon/src/event_queue.rs",
+        "client/crates/mi-daemon/src/ipc_server.rs"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:08:01+08:00",
+      "completed_at": "2026-11-05T18:10:14+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-daemon/src/main.rs": "f1dc3d90e916f6e13a0a795645565860eae247ad3097fde4cf57eae23a84710d",
+        "client/crates/mi-daemon/src/lib.rs": "ff8a2913dd88d4367f3a68cee71f661c862eff52716cf1eafda281127bba9afb",
+        "client/crates/mi-daemon/src/config.rs": "6a1cc0fe4b709e27a63db48b7f80a3377beb622561be589995fa5def222546f5",
+        "client/crates/mi-daemon/src/cloud_client.rs": "3134bcd9fd79fa151d4a10acd3dea8b02d95d0b5b2c74f6116ec55ecce5b79af",
+        "client/crates/mi-daemon/src/event_queue.rs": "6460f89412bc173b5bdf2cccbc6af87ac15edf854314cd2a72fe03f309655304",
+        "client/crates/mi-daemon/src/ipc_server.rs": "3531cea53745c1848381c896d2e61b718522b5e5ab47b4151bcb9d874bc9b1e7"
+      },
+      "post_snapshot": {
+        "client/crates/mi-daemon/src/main.rs": "3334f1d2146ad120561c731f70ae3cb6dea27465fef79383de7af1c46dc069e5",
+        "client/crates/mi-daemon/src/lib.rs": "cd5a71bfb8b90802ef22bd5e909c4264006955b34723d68bdf3d86605d7d2f90",
+        "client/crates/mi-daemon/src/config.rs": "496a3a14d85545dcf4182a2dcbba6bc9699a41ae19f559c79dd6cea6fb277e1d",
+        "client/crates/mi-daemon/src/cloud_client.rs": "b742e56d746de9092554434cb6928db9300c88409c0f350a57cd21285041b4fc",
+        "client/crates/mi-daemon/src/event_queue.rs": "607abf8356871800abba3e2c7f6b0324e24f5b10ba672d4564a2d8ad951e1fb6",
+        "client/crates/mi-daemon/src/ipc_server.rs": "ed4f8078976a953722a899d5997bed90d11255d0560e6e108518b4dd72bfe516"
+      }
+    },
+    "TASK-04": {
+      "task_id": "TASK-04",
+      "name": "实现云端内嵌“边传边下”与分块断点续传缓存引擎",
+      "milestone": "M2",
+      "depends_on": [
+        "TASK-02"
+      ],
+      "scopes": [
+        "server/app/stream_tee_cache.py",
+        "server/app/api/cache.py",
+        "server/app/main.py",
+        "server/tests/test_stream_tee_cache.py"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:10:14+08:00",
+      "completed_at": "2026-11-05T18:13:57+08:00",
+      "pre_snapshot": {
+        "server/app/stream_tee_cache.py": "b0defcef09400cac089f841c2a026d69cee0d318859b3773e95d9e07e3626e98",
+        "server/app/api/cache.py": "5aaf4c416c4f65af1b77640f347617cc78b72dca268de47bc169bf89cecb3ce2",
+        "server/app/main.py": "654d4d00a7d27c63e1a55511a4ace4d61b3a2ce14acf911abab61272c5c8e204",
+        "server/tests/test_stream_tee_cache.py": "7654e2bfbbf69ca45986d11bca8cdf5117364278e25aa064b4443e5e59da075b"
+      },
+      "post_snapshot": {
+        "server/app/stream_tee_cache.py": "f0e899d295ec5b346f937502c10524583dba6f7d594443303ce55480b68a682a",
+        "server/app/api/cache.py": "fbd287025643f3557702e9062be0f1b4a030fe09be68b13c61d581ed85a136c3",
+        "server/app/main.py": "0aedb74b8655a68587c0be086c3a17c1f8458324f7fe8cfd6eabbe610b5bbfc7",
+        "server/tests/test_stream_tee_cache.py": "f948aab3560fbbc0b5ef35cda9310fc27fa5b152534903be80a61f73a9541200"
+      }
+    },
+    "TASK-05": {
+      "task_id": "TASK-05",
+      "name": "实现客户端内网即用即连 (1-to-N 并发 + 180 秒空闲延迟断开) 双向通道",
+      "milestone": "M2",
+      "depends_on": [
+        "TASK-03"
+      ],
+      "scopes": [
+        "client/crates/mi-daemon/src/lan_channel.rs"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:13:57+08:00",
+      "completed_at": "2026-11-05T18:15:38+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-daemon/src/lan_channel.rs": "fb88b9d6107c8aa36a16392cb03b5742d29676cfba3d2eedf0c3f6944c645f58"
+      },
+      "post_snapshot": {
+        "client/crates/mi-daemon/src/lan_channel.rs": "8b1b6b4b48bad30b24347b7fa2691f728b86e61bbc1132fd7aef9c1526d0d7c9"
+      }
+    },
+    "TASK-06": {
+      "task_id": "TASK-06",
+      "name": "实现大文件全链路断点续传、文件夹流式打包解包与远程目录 RPC",
+      "milestone": "M2",
+      "depends_on": [
+        "TASK-04",
+        "TASK-05"
+      ],
+      "scopes": [
+        "client/crates/mi-daemon/src/transfer",
+        "client/crates/mi-daemon/src/fs_rpc.rs"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:15:38+08:00",
+      "completed_at": "2026-11-05T18:17:59+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-daemon/src/transfer/archive.rs": "5d1aa064f36035a760e740111a3311e4ddf9d60e29a673e2cc9b7a499ac59e0c",
+        "client/crates/mi-daemon/src/transfer/downloader.rs": "ca0aa9494758ea912e708ea61e605fa993d1724c621e60da54552bf15bf8d087",
+        "client/crates/mi-daemon/src/transfer/mod.rs": "f20ae49282648490a9caf788c001471984f0e2398becd90b8e76a8f2bcafa254",
+        "client/crates/mi-daemon/src/transfer/uploader.rs": "d01364eb88e9728078b36486d2fd99da013d554847e5e353c5347cb2b093f965",
+        "client/crates/mi-daemon/src/fs_rpc.rs": "ed822135726fe1c4430e932b461df4eb849cc85aae11dce7ba72ebb0d021c9da"
+      },
+      "post_snapshot": {
+        "client/crates/mi-daemon/src/transfer/archive.rs": "c7e5b0e0e94ad4cabf5f7a8b760308595e4863b17511bda70ca34eb0cc1dcd83",
+        "client/crates/mi-daemon/src/transfer/downloader.rs": "963fce7805b03bfd797cd6cdddd1620cdb1a80de3bf49a282b9e815323996ae2",
+        "client/crates/mi-daemon/src/transfer/mod.rs": "fe572f8c8f872a5c74d1701c2a106758791a525d05cb2fc06230875220ef113e",
+        "client/crates/mi-daemon/src/transfer/uploader.rs": "0ca8cf30285cd8257e76068c1509998321178d3b2c492a9361b470afa103e595",
+        "client/crates/mi-daemon/src/fs_rpc.rs": "1dd2d5872d5c9d9703e0b415269f30df80049050fd0f5847e9712112def90349"
+      }
+    },
+    "TASK-07": {
+      "task_id": "TASK-07",
+      "name": "实现 mi CLI 命令行工具与 multinteractor Agent Skill 全链路联调",
+      "milestone": "M2",
+      "depends_on": [
+        "TASK-06"
+      ],
+      "scopes": [
+        "client/crates/mi-cli",
+        "scripts/mi"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:17:59+08:00",
+      "completed_at": "2026-11-05T18:20:54+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-cli/Cargo.toml": "1a93c3d667d53e43dcb7e2748b002ae5f7abb24ebf43c1ed791f83ad48c3728c",
+        "client/crates/mi-cli/src/client.rs": "46b3ba3b249faf98f0c2fe00adeb831ac9c63bb98c0e85447705b683183b6e3f",
+        "client/crates/mi-cli/src/commands/copy.rs": "02057dfa44272970831722b273d1a51ada440eeb9747a82e977ee63d74abdcf9",
+        "client/crates/mi-cli/src/commands/devices.rs": "9c62711dc099d5450e30875a3dfe1323c7f3eb42091ec07fc455be0788edf8a6",
+        "client/crates/mi-cli/src/commands/events.rs": "f0538545f0d36f2711c62a5235b6f2a8807daf5490a7584a638533ad25ffaa7c",
+        "client/crates/mi-cli/src/commands/mod.rs": "13aba4aeb17944062944eec50ff9144701a533094a2ffdc5b53bffc6c8bb1e5d",
+        "client/crates/mi-cli/src/commands/paste.rs": "d3fdbaa27368069c8b5ce1bcec96baa2bc1f52be85278ca7f1fb744784b7ec1e",
+        "client/crates/mi-cli/src/commands/remote_fs.rs": "8056edc320e4c6200f74ac327c057e1728b32ac8efa84361f962e69e6340f9a8",
+        "client/crates/mi-cli/src/commands/sync.rs": "1b1c16311f7b0c4659d0e2c58ef9a93694dfd8d9db46380a9c132d2c37f525f4",
+        "client/crates/mi-cli/src/commands/transfer.rs": "57270ae206ef7c3044c2f2011fa18dfbc58628fbbe6fb50a3d55f2d6fdfd56df",
+        "client/crates/mi-cli/src/main.rs": "d99e597c530e543fad169e700477f8937a237a558b7d974567c0524a48ed1339"
+      },
+      "post_snapshot": {
+        "client/crates/mi-cli/Cargo.toml": "1a93c3d667d53e43dcb7e2748b002ae5f7abb24ebf43c1ed791f83ad48c3728c",
+        "client/crates/mi-cli/src/client.rs": "ef198427f807feb72a4fd3842ff45dd1cc4c0de38677709b4a67a626e0c21b7e",
+        "client/crates/mi-cli/src/commands/copy.rs": "b77079f475d80c3005317f295a72f9456f4d38f3d99f346a9e9d160eaa3a4ee1",
+        "client/crates/mi-cli/src/commands/devices.rs": "79efbac7d2c3e9e26eb585db8d2657d9a5b0366d7e66106bb48970547d94a298",
+        "client/crates/mi-cli/src/commands/events.rs": "40ee84f84c76f06e4362b90d637566c007f330750d87e0478225f83c51958d0b",
+        "client/crates/mi-cli/src/commands/mod.rs": "13aba4aeb17944062944eec50ff9144701a533094a2ffdc5b53bffc6c8bb1e5d",
+        "client/crates/mi-cli/src/commands/paste.rs": "cfdb1de97669d3c0cb750d2b4baa28666957b88169a31eacaf4c313ed2c1722e",
+        "client/crates/mi-cli/src/commands/remote_fs.rs": "999d3289335240555a72ec7ab34b990da5b4ec1a56a4b774bca327441d04a163",
+        "client/crates/mi-cli/src/commands/sync.rs": "85a7cd55d140dfd86d81a5f6ad96652619ccb976ab602316c2dd0476f81c1ec3",
+        "client/crates/mi-cli/src/commands/transfer.rs": "d8f1c771b0c91b5844ffe4286e06242e3b825713acab49053541766df90b1ae3",
+        "client/crates/mi-cli/src/main.rs": "1579a71517d8c336f1b7305f2395d1ae78eec1994068bd12e925d67551c4635d",
+        "scripts/mi": "95d34fd4de4d96ae2976d3e843faaa012f152680f2961257a1af12d01a7ae9b6"
+      }
+    },
+    "TASK-08": {
+      "task_id": "TASK-08",
+      "name": "实现系统全局热键 Alt+C/Alt+V、焦点探测与智能粘贴/保存框兜底",
+      "milestone": "M3",
+      "depends_on": [
+        "TASK-06"
+      ],
+      "scopes": [
+        "client/crates/mi-os/src/lib.rs",
+        "client/crates/mi-os/src/hotkey.rs",
+        "client/crates/mi-os/src/capture.rs",
+        "client/crates/mi-os/src/smart_paste.rs",
+        "client/crates/mi-os/src/power.rs",
+        "client/crates/mi-os/src/platform"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:20:54+08:00",
+      "completed_at": "2026-11-05T18:22:35+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-os/src/lib.rs": "05facad22ee65581dfcdb9e7ec2cd20210c46e14d6b0af4a318dbb5cc2034fbe",
+        "client/crates/mi-os/src/hotkey.rs": "47c9aa07ee4f53c74af28f5c31a5e3988e4e939b00dfa97ad17d36462fe0f38d",
+        "client/crates/mi-os/src/capture.rs": "8155401b8105591a3051495d9e864bef8dc9236009d5e27bea95a06c225b9784",
+        "client/crates/mi-os/src/smart_paste.rs": "8a377307a9abdd3d4ed1f25f41a60eb6d08e27ca4f2b987522f3570ea9bbbdec",
+        "client/crates/mi-os/src/power.rs": "0af176a583babe32f25e97a9eb310d5a82bc57ab28ef643d117fc3bfdb1defb6",
+        "client/crates/mi-os/src/platform/macos.rs": "399d8adcbf33b31c82b89adc849f53baf0ef08559a35a9b72488344d29f72887",
+        "client/crates/mi-os/src/platform/mod.rs": "f91f0aa56b70b81c9e2b36d858d6d72950362e389d07dbe217cec14440f6bd3d",
+        "client/crates/mi-os/src/platform/windows.rs": "8fc3e22d856a9e70f9e16780b420a7656f72ca4abae04cc0939cd7e8b5ab3669"
+      },
+      "post_snapshot": {
+        "client/crates/mi-os/src/lib.rs": "05facad22ee65581dfcdb9e7ec2cd20210c46e14d6b0af4a318dbb5cc2034fbe",
+        "client/crates/mi-os/src/hotkey.rs": "fa518a0ddabf55406d9fbe73a5fbe10432f0374eaa3fcb78436f9f8ff10772a4",
+        "client/crates/mi-os/src/capture.rs": "f160f6cc86a029787509c1aeaca26b407b01d99c315be3e01a4fd8b8bd7bbfb6",
+        "client/crates/mi-os/src/smart_paste.rs": "10e2f5ff1df82029b410cbeef10a90040e2f776e50e5e8a15b7de20859bffed9",
+        "client/crates/mi-os/src/power.rs": "31e9aeb86c260d6092fea853cdd6d8a916fec3500615f46a37ce7ab8380a7823",
+        "client/crates/mi-os/src/platform/macos.rs": "73944f4d958cdfa1c78d8242471ad83106a9ba3bf8dc2e275a1aa25bec3a6fc3",
+        "client/crates/mi-os/src/platform/mod.rs": "832a00a63e6f56e98f61bd03140ab087afee13ffb70b94bd35d78654e76ac301",
+        "client/crates/mi-os/src/platform/windows.rs": "212df3ae8ad22a0c4accf583010833b9ffb861209e3ce111f31483fa8d32cd9a"
+      }
+    },
+    "TASK-09": {
+      "task_id": "TASK-09",
+      "name": "实现系统鼠标右键扩展菜单与远程目录选择器弹窗 (mi-ui)",
+      "milestone": "M4",
+      "depends_on": [
+        "TASK-07",
+        "TASK-08"
+      ],
+      "scopes": [
+        "client/crates/mi-os/src/context_menu.rs",
+        "client/crates/mi-ui"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:22:35+08:00",
+      "completed_at": "2026-11-05T18:57:27+08:00",
+      "pre_snapshot": {
+        "client/crates/mi-os/src/context_menu.rs": "f533214fe05dc747d60aa9f3f6eaef16c011666a4092a739f54e64ef3df36a48",
+        "client/crates/mi-ui/Cargo.toml": "0df21bb03fff57f71804a9bf3043329e048bbfa70b21b1ac6ae3dd27384aed82",
+        "client/crates/mi-ui/src/commands.rs": "95004671adef3bcd4af295f90d50a1338b1110a01ee0bf1361cba4c6d7cff381",
+        "client/crates/mi-ui/src/main.rs": "2066482b9465620d10deca901643022225e9ed7c21a3cd137f3db2f97da7b377",
+        "client/crates/mi-ui/tauri.conf.json": "76b8dbb9eefaa94dd4185f73a0d1502ceb5632d001056f7ae1118e98d80fcfa3",
+        "client/crates/mi-ui/ui/directory_picker.ts": "2cb592d5fd34278f7ba02c4497a23690f882ff592577e2bbd2a3ea073aeaf4d3",
+        "client/crates/mi-ui/ui/index.html": "61e2cef8e8ac547457695832a5444dfe10bb013832a758dc3dcb523722e26fec",
+        "client/crates/mi-ui/ui/transfer_toast.ts": "7939c54bd4ab91c71cdfbf2a9b4d65d8bf4780f86d0433c4ee0385a0d44dde47"
+      },
+      "post_snapshot": {
+        "client/crates/mi-os/src/context_menu.rs": "ab1ae3e418015dc8667b584f1f691c770bd827abd24a8ab234af7c4b341e4b30",
+        "client/crates/mi-ui/Cargo.toml": "0df21bb03fff57f71804a9bf3043329e048bbfa70b21b1ac6ae3dd27384aed82",
+        "client/crates/mi-ui/src/commands.rs": "f06f2ea84e1414e501a8a2198bed6f19ab104c7254a80d16ac2ac0aeaa5ea8d7",
+        "client/crates/mi-ui/src/main.rs": "ec0dec1f5f6184c11d2c217c1be10fd4a05537e32c841ed43d8e9a3a7a152e24",
+        "client/crates/mi-ui/tauri.conf.json": "76b8dbb9eefaa94dd4185f73a0d1502ceb5632d001056f7ae1118e98d80fcfa3",
+        "client/crates/mi-ui/ui/directory_picker.ts": "d22583e8edb00bae293c4a04dc0e633edd65aaf50064d3422798aee3c23bcf2e",
+        "client/crates/mi-ui/ui/index.html": "0db04ff422271caf0fddc77d9c02e2ab88dc5d7b6a3f9584d166b74f40215dd0",
+        "client/crates/mi-ui/ui/transfer_toast.ts": "ff31ce380b8139aa9de8030daaf6372300ffc85c7c1e33e1a000e91b85fa5ee7"
+      }
+    },
+    "TASK-10": {
+      "task_id": "TASK-10",
+      "name": "全链路集成测试、故障注入验证与交付打包",
+      "milestone": "M4",
+      "depends_on": [
+        "TASK-01",
+        "TASK-02",
+        "TASK-03",
+        "TASK-04",
+        "TASK-05",
+        "TASK-06",
+        "TASK-07",
+        "TASK-08",
+        "TASK-09"
+      ],
+      "scopes": [
+        "tests/integration",
+        "tests/chaos",
+        "tests/e2e",
+        "deploy",
+        "Makefile"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-05T18:57:27+08:00",
+      "completed_at": "2026-11-05T19:12:20+08:00",
+      "pre_snapshot": {
+        "tests/integration/test_signaling_and_audit.py": "5230d3f29a5acf7e8f0363d443bb18992534e55e46ef7fd9f0beada2135a18b1",
+        "tests/integration/test_stream_teeing_pipeline.py": "d8818e0295e2f1cb5f4f5fefc8a7ae4667b9eec862c1803e0242788b1ea79cd8",
+        "tests/chaos/test_lan_idle_disconnect.py": "efa2bff839f34be172c1fdb4131ef04685733ef24be10bc64184ee805d467188",
+        "tests/chaos/test_resumable_transfer.py": "d1e2b09d487b5e64a1ded27dafd439dabdc17cb4c6d97ddf9aa5435c0585771b",
+        "tests/e2e/test_cli_and_skill_workflow.py": "302ece103ad810371c28df4e2a4bf5b244ef4c8d803bc017900df1dcda569457",
+        "tests/e2e/test_clipboard_and_sync_e2e.py": "430113b7eaf4e3bce09fcd7465c38afbf491c51c17c80e3bd9930664055a9398",
+        "deploy/client/macos/com.multinteractor.daemon.plist": "db02b90aac37834b7ebd1feeae4174ca230392e5f36599eab8d5c8569047761f",
+        "deploy/client/windows/install_service_and_menu.ps1": "1bbb5e64366cfbe392072f8180e87515445934cf2e840bcb6d637b6235ed71b1",
+        "deploy/server/Dockerfile": "c5fcd95ca8ad796d05a6d8df34c2bcb972f2486de1e64dd517be53f21a62ff4f",
+        "deploy/server/docker-compose.yml": "80863b2e78ecc2d7f4b7574dbe4e92e97275c5dcdd9a2631b3ba9b86d8089f12",
+        "deploy/server/multinteractor-hub.service": "566ae9f0db67f744b430809c9b98a3f56e3b5e2757731e09e3d099020327cec4",
+        "Makefile": "f7731b9d9d2b00d92e022ea76d35525a44854fbb4e84ce4aa36ed5fff870a37f"
+      },
+      "post_snapshot": {
+        "tests/integration/test_signaling_and_audit.py": "96fb65e1a51471ce8c6fc5d84d77d6dca3aba057694f2a013695e0fd079bc81d",
+        "tests/integration/test_stream_teeing_pipeline.py": "3cc02681511fa430bfd2fe198dcd0f6cc107ea2bdf4ff9e17a36a1ea486dece6",
+        "tests/chaos/test_lan_idle_disconnect.py": "6971d8563b29c186d901e01caa3f3f0676cdf9cd589df99d1e17f8a89377dac9",
+        "tests/chaos/test_resumable_transfer.py": "8d4a652bec2adb5484f889dd34e800cd2d3cfb1505e9de70b8453805a0c8ab8c",
+        "tests/e2e/test_cli_and_skill_workflow.py": "f0d146ec3b427908cd0fb79226f3ae4e7fdce8a4379375a054fdad3c10c75569",
+        "tests/e2e/test_clipboard_and_sync_e2e.py": "0c87d3907bd25c92de01c172dd2c9ec2dbc42fac417cbda2479b90d2bdcbc918",
+        "deploy/client/macos/com.multinteractor.daemon.plist": "db02b90aac37834b7ebd1feeae4174ca230392e5f36599eab8d5c8569047761f",
+        "deploy/client/windows/install_service_and_menu.ps1": "1bbb5e64366cfbe392072f8180e87515445934cf2e840bcb6d637b6235ed71b1",
+        "deploy/server/Dockerfile": "c5fcd95ca8ad796d05a6d8df34c2bcb972f2486de1e64dd517be53f21a62ff4f",
+        "deploy/server/docker-compose.yml": "80863b2e78ecc2d7f4b7574dbe4e92e97275c5dcdd9a2631b3ba9b86d8089f12",
+        "deploy/server/multinteractor-hub.service": "566ae9f0db67f744b430809c9b98a3f56e3b5e2757731e09e3d099020327cec4",
+        "Makefile": "692d06344119571dbbb0663e9235b25d1dba0eafb8ec0d51ca1e58d1819e48f7"
+      }
+    }
+  }
+}
