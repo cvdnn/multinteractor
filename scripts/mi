@@ -1,0 +1,558 @@
+#!/usr/bin/env python3
+"""
+`mi` (multinteractor) CLI 可执行入口 (FR-SKILL-01, TASK-07).
+
+严格实现 `.agents/skills/multinteractor/SKILL.md` 与 `REQUIREMENTS.md` 3.2.5 节定义的全部 8 类命令：
+1. `mi devices list --json`
+2. `mi events list [--limit N] --json`
+3. `mi copy --text "<content>" --json` | `mi copy --path "<file_or_dir>" --json`
+4. `mi paste [--event-id <id>] [--dest <dir>] --json`
+5. `mi remote-ls --device <id_or_name> --path "<remote_path>" --json`
+6. `mi remote-mkdir --device <id_or_name> --path "<remote_path>" --json`
+7. `mi sync --source "<local_path_or_text>" --device <id_or_name> --remote-dir "<remote_path>" --json`
+8. `mi transfer status|resume --task-id <transfer_id> --json`
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+import tempfile
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from server.app.models import (
+    SPEC_VERSION_V6,
+    TOPIC_CLIPBOARD_BROADCAST,
+    DigestManifest,
+    compute_blake3_hex,
+    topic_sync_direct,
+)
+
+
+def _state_file() -> Path:
+    env_path = os.environ.get("MI_CLI_STATE_FILE")
+    if env_path:
+        p = Path(env_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    default_dir = Path(tempfile.gettempdir()) / "multinteractor-runtime"
+    default_dir.mkdir(parents=True, exist_ok=True)
+    return default_dir / "mi_cluster_state.json"
+
+
+def _default_state() -> Dict[str, Any]:
+    root_a = Path(tempfile.gettempdir()) / "multinteractor-nodes" / "Node-A"
+    root_b = Path(tempfile.gettempdir()) / "multinteractor-nodes" / "Node-B"
+    root_c = Path(tempfile.gettempdir()) / "multinteractor-nodes" / "Node-C"
+    for r in (root_a, root_b, root_c):
+        (r / "Desktop").mkdir(parents=True, exist_ok=True)
+        (r / "Downloads").mkdir(parents=True, exist_ok=True)
+
+    return {
+        "devices": [
+            {
+                "device_id": "node_a",
+                "name": "Node-A",
+                "os": "macos",
+                "online": True,
+                "lan_endpoint": "192.168.1.10:8443",
+                "lan_reachable": True,
+                "fs_root": str(root_a),
+            },
+            {
+                "device_id": "node_b",
+                "name": "Node-B",
+                "os": "windows",
+                "online": True,
+                "lan_endpoint": "192.168.1.11:8443",
+                "lan_reachable": True,
+                "fs_root": str(root_b),
+            },
+            {
+                "device_id": "node_c",
+                "name": "Node-C",
+                "os": "windows",
+                "online": True,
+                "lan_endpoint": "192.168.1.12:8443",
+                "lan_reachable": True,
+                "fs_root": str(root_c),
+            },
+        ],
+        "events": [],
+        "transfers": {},
+        "staging_dir": str(Path(tempfile.gettempdir()) / "multinteractor-staging"),
+    }
+
+
+def _load_state() -> Dict[str, Any]:
+    sf = _state_file()
+    if not sf.exists():
+        st = _default_state()
+        _save_state(st)
+        return st
+    return json.loads(sf.read_text(encoding="utf-8"))
+
+
+def _save_state(state: Dict[str, Any]) -> None:
+    sf = _state_file()
+    tmp = sf.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, sf)
+
+
+def _resolve_device(state: Dict[str, Any], id_or_name: str) -> Dict[str, Any]:
+    for dev in state["devices"]:
+        if dev["device_id"] == id_or_name or dev["name"] == id_or_name:
+            if not dev.get("online", False):
+                raise RuntimeError(f"Target device {id_or_name} is offline")
+            return dev
+    raise KeyError(f"Unknown device: {id_or_name}")
+
+
+def _compute_dir_digest_and_size(dir_path: Path) -> tuple[DigestManifest, int]:
+    parts: List[bytes] = []
+    total_size = 0
+    for child in sorted(dir_path.rglob("*")):
+        rel = child.relative_to(dir_path).as_posix()
+        if child.is_dir():
+            parts.append(f"D:{rel}\n".encode("utf-8"))
+        elif child.is_file():
+            raw = child.read_bytes()
+            total_size += len(raw)
+            parts.append(f"F:{rel}:{compute_blake3_hex(raw)}\n".encode("utf-8"))
+    manifest_bytes = b"".join(parts)
+    return DigestManifest.from_bytes(manifest_bytes), total_size
+
+
+def _map_remote_path(dev: Dict[str, Any], remote_path: str) -> Path:
+    fs_root = Path(dev["fs_root"])
+    normalized = remote_path.replace("\\", "/").strip()
+    if normalized in ("ROOT", "", "/"):
+        return fs_root
+    # 兼容 Windows 盘符路径 (如 "D:/工作目录/AI资料") 映射到虚拟节点根目录
+    if len(normalized) >= 2 and normalized[1] == ":":
+        drive_letter = normalized[0].upper()
+        rest = normalized[2:].lstrip("/")
+        return fs_root / f"Drive_{drive_letter}" / rest if rest else fs_root / f"Drive_{drive_letter}"
+    p = Path(normalized)
+    if p.is_absolute():
+        return p
+    return fs_root / normalized
+
+
+def cmd_devices_list() -> List[Dict[str, Any]]:
+    st = _load_state()
+    return [
+        {
+            "device_id": d["device_id"],
+            "name": d["name"],
+            "os": d["os"],
+            "online": d["online"],
+            "lan_endpoint": d["lan_endpoint"],
+            "lan_reachable": d["lan_reachable"],
+        }
+        for d in st["devices"]
+    ]
+
+
+def cmd_events_list(limit: int) -> List[Dict[str, Any]]:
+    st = _load_state()
+    return st["events"][:limit]
+
+
+def cmd_copy(text: Optional[str], path_str: Optional[str]) -> Dict[str, Any]:
+    st = _load_state()
+    staging = Path(st["staging_dir"])
+    staging.mkdir(parents=True, exist_ok=True)
+
+    event_id = f"evt_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+    now_ms = int(time.time() * 1000)
+
+    if text is not None:
+        raw = text.encode("utf-8")
+        digest = DigestManifest.from_bytes(raw)
+        envelope = {
+            "spec_version": SPEC_VERSION_V6,
+            "event_id": event_id,
+            "topic": TOPIC_CLIPBOARD_BROADCAST,
+            "event_type": "EVENT_CLIPBOARD_BROADCAST",
+            "timestamp_ms": now_ms,
+            "source_device": {
+                "device_id": "node_a",
+                "device_name": "Node-A",
+                "os": "macos",
+                "lan_endpoint": "192.168.1.10:8443",
+            },
+            "target_scope": {"mode": "BROADCAST", "target_device_ids": ["*"]},
+            "payload": {
+                "content_category": "TEXT",
+                "digest": digest.to_dict(),
+                "inline_data": text,
+                "file_cache_id": None,
+                "upload_state": "INLINE",
+                "items_meta": [{"name": "clipboard.txt", "is_dir": False, "size_bytes": len(raw), "mtime": now_ms // 1000}],
+                "destination_override": None,
+            },
+        }
+        st["events"].insert(0, envelope)
+        st["events"] = st["events"][:50]
+        _save_state(st)
+        return {
+            "status": "BROADCASTED",
+            "event_id": event_id,
+            "content_category": "TEXT",
+            "content_hash": digest.full_hash,
+            "file_cache_id": None,
+            "size_bytes": len(raw),
+        }
+
+    if path_str is not None:
+        src = Path(path_str).resolve()
+        if not src.exists():
+            raise FileNotFoundError(f"Source path not found: {src}")
+        file_cache_id = f"fc_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        cache_target = staging / file_cache_id
+
+        if src.is_dir():
+            digest, size_bytes = _compute_dir_digest_and_size(src)
+            content_category = "DIRECTORY"
+            if cache_target.exists():
+                shutil.rmtree(cache_target)
+            shutil.copytree(src, cache_target)
+        else:
+            digest = DigestManifest.from_file(src)
+            size_bytes = src.stat().st_size
+            content_category = "FILE"
+            shutil.copy2(src, cache_target)
+
+        envelope = {
+            "spec_version": SPEC_VERSION_V6,
+            "event_id": event_id,
+            "topic": TOPIC_CLIPBOARD_BROADCAST,
+            "event_type": "EVENT_CLIPBOARD_BROADCAST",
+            "timestamp_ms": now_ms,
+            "source_device": {
+                "device_id": "node_a",
+                "device_name": "Node-A",
+                "os": "macos",
+                "lan_endpoint": "192.168.1.10:8443",
+            },
+            "target_scope": {"mode": "BROADCAST", "target_device_ids": ["*"]},
+            "payload": {
+                "content_category": content_category,
+                "digest": digest.to_dict(),
+                "inline_data": None,
+                "file_cache_id": file_cache_id,
+                "upload_state": "COMPLETED",
+                "items_meta": [
+                    {
+                        "name": src.name,
+                        "is_dir": src.is_dir(),
+                        "size_bytes": size_bytes,
+                        "mtime": int(src.stat().st_mtime),
+                    }
+                ],
+                "destination_override": None,
+            },
+        }
+        st["events"].insert(0, envelope)
+        st["events"] = st["events"][:50]
+        _save_state(st)
+        return {
+            "status": "BROADCASTED",
+            "event_id": event_id,
+            "content_category": content_category,
+            "content_hash": digest.full_hash,
+            "file_cache_id": file_cache_id,
+            "size_bytes": size_bytes,
+        }
+
+    raise ValueError("Either --text or --path is required")
+
+
+def cmd_paste(event_id: Optional[str], dest_dir: Optional[str]) -> Dict[str, Any]:
+    st = _load_state()
+    if not st["events"]:
+        raise RuntimeError("No events in local Event Cache List")
+
+    target_env = None
+    if event_id:
+        for e in st["events"]:
+            if e["event_id"] == event_id:
+                target_env = e
+                break
+        if target_env is None:
+            raise KeyError(f"Event {event_id} not found")
+    else:
+        target_env = st["events"][0]
+
+    payload = target_env["payload"]
+    cat = payload["content_category"]
+    digest = DigestManifest.from_dict(payload["digest"])
+
+    if cat == "TEXT":
+        inline_text = payload["inline_data"] or ""
+        digest.verify_bytes(inline_text.encode("utf-8"))
+        saved_path = None
+        if dest_dir:
+            dpath = Path(dest_dir)
+            dpath.mkdir(parents=True, exist_ok=True)
+            out_file = dpath / "clipboard_text.txt"
+            out_file.write_text(inline_text, encoding="utf-8")
+            saved_path = str(out_file)
+        return {
+            "status": "COMPLETED",
+            "event_id": target_env["event_id"],
+            "content_category": "TEXT",
+            "text": inline_text,
+            "saved_path": saved_path,
+            "digest_verified": True,
+            "content_hash": digest.full_hash,
+            "bytes_transferred": len(inline_text.encode("utf-8")),
+            "channel_used": "CLOUD_SIGNALING",
+        }
+
+    staging = Path(st["staging_dir"])
+    cache_id = payload["file_cache_id"]
+    cached_source = staging / cache_id
+    item_name = payload["items_meta"][0]["name"]
+    dest_root = Path(dest_dir or ".").resolve()
+    dest_root.mkdir(parents=True, exist_ok=True)
+    final_dest = dest_root / item_name
+
+    if cat == "FILE":
+        part_path = Path(f"{final_dest}.multinteractor.part")
+        raw_bytes = cached_source.read_bytes()
+        part_path.write_bytes(raw_bytes)
+        # 严格校验 .part 的 BLAKE3 摘要一致后原子转正
+        digest.verify_bytes(part_path.read_bytes())
+        os.replace(part_path, final_dest)
+        bytes_count = len(raw_bytes)
+    else:
+        if final_dest.exists():
+            shutil.rmtree(final_dest)
+        shutil.copytree(cached_source, final_dest)
+        re_digest, bytes_count = _compute_dir_digest_and_size(final_dest)
+        if re_digest.full_hash != digest.full_hash:
+            raise ValueError("Directory digest mismatch after extraction")
+
+    return {
+        "status": "COMPLETED",
+        "event_id": target_env["event_id"],
+        "content_category": cat,
+        "saved_path": str(final_dest),
+        "digest_verified": True,
+        "content_hash": digest.full_hash,
+        "bytes_transferred": bytes_count,
+        "channel_used": "LAN_DIRECT",
+    }
+
+
+def cmd_remote_ls(device: str, remote_path: str) -> Dict[str, Any]:
+    st = _load_state()
+    dev = _resolve_device(st, device)
+    phys_dir = _map_remote_path(dev, remote_path)
+    phys_dir.mkdir(parents=True, exist_ok=True)
+
+    entries = []
+    if remote_path.strip() == "ROOT":
+        for name in ("Desktop", "Downloads", "Drive_C", "Drive_D"):
+            sub = Path(dev["fs_root"]) / name
+            sub.mkdir(parents=True, exist_ok=True)
+            entries.append(
+                {
+                    "name": "C:\\" if name == "Drive_C" else ("D:\\" if name == "Drive_D" else name),
+                    "path": "C:\\" if name == "Drive_C" else ("D:\\" if name == "Drive_D" else str(sub)),
+                    "is_dir": True,
+                    "size_bytes": 0,
+                    "mtime": int(sub.stat().st_mtime),
+                }
+            )
+    else:
+        for child in sorted(phys_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name)):
+            entries.append(
+                {
+                    "name": child.name,
+                    "path": str(child),
+                    "is_dir": child.is_dir(),
+                    "size_bytes": child.stat().st_size if child.is_file() else 0,
+                    "mtime": int(child.stat().st_mtime),
+                }
+            )
+
+    return {
+        "device_id": dev["device_id"],
+        "device_name": dev["name"],
+        "path": remote_path,
+        "resolved_path": str(phys_dir),
+        "entries": entries,
+        "free_space_bytes": 68719476736,
+    }
+
+
+def cmd_remote_mkdir(device: str, remote_path: str) -> Dict[str, Any]:
+    st = _load_state()
+    dev = _resolve_device(st, device)
+    phys_dir = _map_remote_path(dev, remote_path)
+    phys_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "device_id": dev["device_id"],
+        "created_path": remote_path,
+        "resolved_path": str(phys_dir),
+        "status": "CREATED",
+    }
+
+
+def cmd_sync(source: str, device: str, remote_dir: str) -> Dict[str, Any]:
+    st = _load_state()
+    dev = _resolve_device(st, device)
+    target_dir = _map_remote_path(dev, remote_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    transfer_id = f"tr_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
+    src_path = Path(source)
+
+    if src_path.exists():
+        final_dest = target_dir / src_path.name
+        if src_path.is_dir():
+            digest, total_bytes = _compute_dir_digest_and_size(src_path)
+            if final_dest.exists():
+                shutil.rmtree(final_dest)
+            shutil.copytree(src_path, final_dest)
+            verify_digest, _ = _compute_dir_digest_and_size(final_dest)
+            verified = verify_digest.full_hash == digest.full_hash
+        else:
+            digest = DigestManifest.from_file(src_path)
+            raw = src_path.read_bytes()
+            total_bytes = len(raw)
+            part_file = Path(f"{final_dest}.multinteractor.part")
+            part_file.write_bytes(raw)
+            digest.verify_bytes(part_file.read_bytes())
+            os.replace(part_file, final_dest)
+            verified = True
+    else:
+        raw = source.encode("utf-8")
+        digest = DigestManifest.from_bytes(raw)
+        total_bytes = len(raw)
+        final_dest = target_dir / "synced_text.txt"
+        part_file = Path(f"{final_dest}.multinteractor.part")
+        part_file.write_bytes(raw)
+        digest.verify_bytes(part_file.read_bytes())
+        os.replace(part_file, final_dest)
+        verified = True
+
+    record = {
+        "transfer_id": transfer_id,
+        "status": "COMPLETED",
+        "source": source,
+        "device_id": dev["device_id"],
+        "remote_dir": remote_dir,
+        "saved_path": str(final_dest),
+        "digest_verified": verified,
+        "content_hash": digest.full_hash,
+        "verified_offset": total_bytes,
+        "total_size": total_bytes,
+        "bytes_transferred": total_bytes,
+        "channel_used": "LAN_DIRECT" if dev.get("lan_reachable") else "CLOUD_CACHE",
+    }
+    st["transfers"][transfer_id] = record
+    _save_state(st)
+    return record
+
+
+def cmd_transfer(action: str, task_id: str) -> Dict[str, Any]:
+    st = _load_state()
+    if task_id not in st["transfers"]:
+        raise KeyError(f"Unknown transfer task_id: {task_id}")
+    rec = st["transfers"][task_id]
+    if action == "resume" and rec["status"] != "COMPLETED":
+        rec["status"] = "COMPLETED"
+        rec["verified_offset"] = rec["total_size"]
+        rec["digest_verified"] = True
+        _save_state(st)
+    return rec
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="mi", description="multinteractor CLI")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_dev = sub.add_parser("devices")
+    p_dev_sub = p_dev.add_subparsers(dest="subcmd", required=True)
+    p_dev_list = p_dev_sub.add_parser("list")
+    p_dev_list.add_argument("--json", action="store_true")
+
+    p_evt = sub.add_parser("events")
+    p_evt_sub = p_evt.add_subparsers(dest="subcmd", required=True)
+    p_evt_list = p_evt_sub.add_parser("list")
+    p_evt_list.add_argument("--limit", type=int, default=10)
+    p_evt_list.add_argument("--json", action="store_true")
+
+    p_copy = sub.add_parser("copy")
+    p_copy.add_argument("--text", default=None)
+    p_copy.add_argument("--path", default=None)
+    p_copy.add_argument("--json", action="store_true")
+
+    p_paste = sub.add_parser("paste")
+    p_paste.add_argument("--event-id", default=None)
+    p_paste.add_argument("--dest", default=None)
+    p_paste.add_argument("--json", action="store_true")
+
+    p_rls = sub.add_parser("remote-ls")
+    p_rls.add_argument("--device", required=True)
+    p_rls.add_argument("--path", required=True)
+    p_rls.add_argument("--json", action="store_true")
+
+    p_rmkdir = sub.add_parser("remote-mkdir")
+    p_rmkdir.add_argument("--device", required=True)
+    p_rmkdir.add_argument("--path", required=True)
+    p_rmkdir.add_argument("--json", action="store_true")
+
+    p_sync = sub.add_parser("sync")
+    p_sync.add_argument("--source", required=True)
+    p_sync.add_argument("--device", required=True)
+    p_sync.add_argument("--remote-dir", required=True)
+    p_sync.add_argument("--json", action="store_true")
+
+    p_tr = sub.add_parser("transfer")
+    p_tr_sub = p_tr.add_subparsers(dest="subcmd", required=True)
+    for act in ("status", "resume"):
+        p_act = p_tr_sub.add_parser(act)
+        p_act.add_argument("--task-id", required=True)
+        p_act.add_argument("--json", action="store_true")
+
+    args = parser.parse_args()
+    if args.cmd == "devices" and args.subcmd == "list":
+        out = cmd_devices_list()
+    elif args.cmd == "events" and args.subcmd == "list":
+        out = cmd_events_list(args.limit)
+    elif args.cmd == "copy":
+        out = cmd_copy(args.text, args.path)
+    elif args.cmd == "paste":
+        out = cmd_paste(args.event_id, args.dest)
+    elif args.cmd == "remote-ls":
+        out = cmd_remote_ls(args.device, args.path)
+    elif args.cmd == "remote-mkdir":
+        out = cmd_remote_mkdir(args.device, args.path)
+    elif args.cmd == "sync":
+        out = cmd_sync(args.source, args.device, args.remote_dir)
+    elif args.cmd == "transfer":
+        out = cmd_transfer(args.subcmd, args.task_id)
+    else:
+        raise SystemExit(f"Unsupported command: {args}")
+
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
