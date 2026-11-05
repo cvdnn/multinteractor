@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>multinteractor — 同步到目标设备目录</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body { margin: 0; padding: 16px; background: #18181b; color: #f4f4f5; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .tree-container { border: 1px solid #3f3f46; border-radius: 8px; height: 240px; overflow-y: auto; padding: 8px; background: #27272a; }
+    .actions-bar { display: flex; justify-content: space-between; margin-top: 12px; }
+    button { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #3f3f46; color: #e4e4e7; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="modal-header">
+      <strong id="target-device-title">同步到目标机器</strong>
+      <span id="free-space-badge">剩余空间: -- GB</span>
+    </div>
+    <div id="directory-tree" class="tree-container" role="tree" aria-label="远程目录树"></div>
+    <div class="actions-bar">
+      <button id="btn-remote-mkdir" class="btn-secondary" type="button">新建文件夹</button>
+      <div>
+        <button id="btn-confirm-sync" class="btn-primary" type="button">确认同步</button>
+      </div>
+    </div>
+    <div id="transfer-toast-slot"></div>
+  </div>
+  <script type="module" src="./directory_picker.ts"></script>
+  <script type="module" src="./transfer_toast.ts"></script>
+</body>
+</html>

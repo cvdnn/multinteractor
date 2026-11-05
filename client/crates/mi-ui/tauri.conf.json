@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "multinteractor",
+  "version": "0.1.0",
+  "identifier": "com.multinteractor.ui",
+  "build": {
+    "frontendDist": "./ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "同步到目标设备目录",
+        "width": 520,
+        "height": 420,
+        "resizable": true,
+        "visible": false
+      }
+    ]
+  }
+}

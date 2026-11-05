@@ -1,0 +1,14 @@
+[package]
+name = "mi-ui"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mi-ui"
+path = "src/main.rs"
+
+[dependencies]
+mi-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
