@@ -1,0 +1,13 @@
+services:
+  multinteractor-hub:
+    build:
+      context: ../..
+      dockerfile: deploy/server/Dockerfile
+    container_name: multinteractor-hub
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MI_SERVER_DATA_DIR=/var/lib/multinteractor
+    volumes:
+      - ./data:/var/lib/multinteractor
