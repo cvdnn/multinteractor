@@ -25,7 +25,9 @@ from typing import Dict, List, Optional
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOCK_FILE = ROOT_DIR / ".task_lock.json"
-PLAN_FILE = ROOT_DIR / "IMPLEMENTATION_PLAN.md"
+PLAN_FILE = ROOT_DIR / "doc" / "IMPLEMENTATION_PLAN.md"
+if not PLAN_FILE.exists() and (ROOT_DIR / "IMPLEMENTATION_PLAN.md").exists():
+    PLAN_FILE = ROOT_DIR / "IMPLEMENTATION_PLAN.md"
 
 TASK_DEFINITIONS: Dict[str, dict] = {
     "TASK-01": {
@@ -148,6 +150,62 @@ TASK_DEFINITIONS: Dict[str, dict] = {
             "Makefile",
         ],
     },
+    "TASK-11": {
+        "name": "实现云端运维状态持久化、只读非续期 24H 流式缓存清理与心跳审计强化",
+        "milestone": "M5",
+        "depends_on": ["TASK-02", "TASK-04"],
+        "scopes": [
+            "server/app/config.py",
+            "server/app/state_store.py",
+            "server/app/audit_logger.py",
+            "server/app/client_sub_manager.py",
+            "server/app/stream_tee_cache.py",
+        ],
+    },
+    "TASK-12": {
+        "name": "实现控制面双 Token 鉴权、WebUI REST API 扩展与 /ws/admin 实时遥测网关",
+        "milestone": "M5",
+        "depends_on": ["TASK-11"],
+        "scopes": [
+            "server/app/api/auth.py",
+            "server/app/api/devices.py",
+            "server/app/api/cache.py",
+            "server/app/api/audit.py",
+            "server/app/api/system.py",
+            "server/app/main.py",
+        ],
+    },
+    "TASK-13": {
+        "name": "构建云端 WebUI TypeScript 前端工程与零 CDN 离线静态资源产物",
+        "milestone": "M5",
+        "depends_on": ["TASK-12"],
+        "scopes": [
+            "server/webui",
+            "server/app/static",
+        ],
+    },
+    "TASK-14": {
+        "name": "更新容器化部署 (Docker + Python>=3.11)、打包配置与工程计划同步",
+        "milestone": "M5",
+        "depends_on": ["TASK-13"],
+        "scopes": [
+            "server/pyproject.toml",
+            "server/README.md",
+            "deploy/server",
+            ".gitignore",
+            "Makefile",
+            "scripts/task_guard.py",
+            "doc/IMPLEMENTATION_PLAN.md",
+        ],
+    },
+    "TASK-15": {
+        "name": "执行 Cloud WebUI、双 Token 平面隔离、24H 缓存清理与持久化全链路测试验收",
+        "milestone": "M5",
+        "depends_on": ["TASK-11", "TASK-12", "TASK-13", "TASK-14"],
+        "scopes": [
+            "server/tests",
+        ],
+    },
 }
 
 
@@ -163,7 +221,12 @@ def compute_scope_snapshot(scopes: List[str]) -> Dict[str, str]:
             snapshot[scope] = hashlib.sha256(target.read_bytes()).hexdigest()
         elif target.is_dir():
             for child in sorted(target.rglob("*")):
-                if child.is_file() and "__pycache__" not in child.parts:
+                if (
+                    child.is_file()
+                    and "__pycache__" not in child.parts
+                    and "node_modules" not in child.parts
+                    and ".vite" not in child.parts
+                ):
                     rel = child.relative_to(ROOT_DIR).as_posix()
                     snapshot[rel] = hashlib.sha256(child.read_bytes()).hexdigest()
     return snapshot
@@ -171,7 +234,31 @@ def compute_scope_snapshot(scopes: List[str]) -> Dict[str, str]:
 
 def load_state() -> dict:
     if LOCK_FILE.exists():
-        return json.loads(LOCK_FILE.read_text(encoding="utf-8"))
+        state = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
+        changed = False
+        for tid, meta in TASK_DEFINITIONS.items():
+            if tid not in state["tasks"]:
+                state["tasks"][tid] = {
+                    "task_id": tid,
+                    "name": meta["name"],
+                    "milestone": meta["milestone"],
+                    "depends_on": meta["depends_on"],
+                    "scopes": meta["scopes"],
+                    "status": "PENDING",
+                    "started_at": None,
+                    "completed_at": None,
+                    "pre_snapshot": {},
+                    "post_snapshot": {},
+                }
+                changed = True
+            else:
+                for key in ("name", "milestone", "depends_on", "scopes"):
+                    if state["tasks"][tid].get(key) != meta[key]:
+                        state["tasks"][tid][key] = meta[key]
+                        changed = True
+        if changed:
+            save_state(state)
+        return state
     tasks = {}
     for tid, meta in TASK_DEFINITIONS.items():
         tasks[tid] = {

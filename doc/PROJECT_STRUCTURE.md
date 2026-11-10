@@ -34,10 +34,14 @@ standard: ISO/IEC/IEEE 42010 (Architecture Description)
 
 ```text
 multinteractor/
-├── REQUIREMENTS.md                          # [PRD/SRS] 需求规格说明书 (v6)
-├── IMPLEMENTATION_PLAN.md                   # [PM] 优先级评估与分阶段工程落地计划 (v1)
-├── TEST_AND_ACCEPTANCE.md                   # [QA] 测试金字塔与验收规格说明书 (v1)
-├── PROJECT_STRUCTURE.md                     # [ARCH] 项目目录结构与模块边界规范 (本文档)
+├── doc/                                     # 项目系统设计、需求、计划与规格文档集
+│   ├── REQUIREMENTS.md                      # [PRD/SRS] 需求规格说明书 (v6)
+│   ├── IMPLEMENTATION_PLAN.md               # [PM] 优先级评估与分阶段工程落地计划 (v1)
+│   ├── TEST_AND_ACCEPTANCE.md               # [QA] 测试金字塔与验收规格说明书 (v1)
+│   ├── PROJECT_STRUCTURE.md                 # [ARCH] 项目目录结构与模块边界规范 (本文档)
+│   ├── OPTIMIZATION_AND_SECURITY_DESIGN.md  # [SEC] 系统技术优化设计与安全加固规范
+│   ├── UI_DESIGN_SPEC.md                    # [UI/UX] 客户端界面设计规范 (Deskflow 模式剖析与交互设计)
+│   └── CLOUD_WEBUI_DESIGN_SPEC.md           # [UI/UX] 云端 WebUI 管理控制台系统设计说明书
 ├── Makefile                                 # 统一构建、代码检查与联调测试入口
 ├── .gitignore                               # Git 忽略规则 (排除 target/, .venv/, *.part, *.resume.json 等)
 │

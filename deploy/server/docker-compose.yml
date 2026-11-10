@@ -8,6 +8,22 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - MI_SERVER_HOST=0.0.0.0
+      - MI_SERVER_PORT=8000
       - MI_SERVER_DATA_DIR=/var/lib/multinteractor
+      # 建议生产部署通过 .env 覆盖以下两个密钥以隔离控制面(WebUI)与数据面(客户端):
+      - MI_CLUSTER_TOKEN=${MI_CLUSTER_TOKEN:-mi-personal-secret-token-2026}
+      - MI_ADMIN_TOKEN=${MI_ADMIN_TOKEN:-}
+      - MI_CACHE_TTL_SECONDS=${MI_CACHE_TTL_SECONDS:-86400}
+      - MI_CACHE_MAX_BYTES=${MI_CACHE_MAX_BYTES:-10737418240}
+      - MI_CACHE_CLEANUP_INTERVAL_SECONDS=${MI_CACHE_CLEANUP_INTERVAL_SECONDS:-60}
+      - MI_AUDIT_RETENTION_DAYS=${MI_AUDIT_RETENTION_DAYS:-90}
+      - MI_UI_ENABLED=${MI_UI_ENABLED:-true}
     volumes:
       - ./data:/var/lib/multinteractor
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

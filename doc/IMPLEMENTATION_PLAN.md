@@ -79,6 +79,14 @@ flowchart LR
         T10["TASK-10: 全链路自动化测试与多机验收"]
     end
 
+    subgraph M5["里程碑 M5：云端 WebUI 管理控制台与控制面治理"]
+        T11["TASK-11: 状态持久化与严格24H缓存清理"]
+        T12["TASK-12: 双Token鉴权、Admin API与WS遥测"]
+        T13["TASK-13: TypeScript WebUI零CDN构建打包"]
+        T14["TASK-14: Docker Py3.11部署与计划同步"]
+        T15["TASK-15: WebUI全链路测试与验收"]
+    end
+
     T1 --> T2
     T1 --> T3
     T2 --> T4
@@ -90,6 +98,12 @@ flowchart LR
     T7 --> T9
     T8 --> T9
     T9 --> T10
+    T2 --> T11
+    T4 --> T11
+    T11 --> T12
+    T12 --> T13
+    T13 --> T14
+    T14 --> T15
 ```
 
 ### 2.1 任务执行原子性与防冲突机制 (Task Atomicity & Conflict Prevention)
@@ -115,6 +129,11 @@ flowchart LR
 | **`TASK-08`** | 实现系统全局热键 `Alt+C`/`Alt+V`、焦点探测与智能粘贴/保存框兜底 | **M3** | `TASK-06` | ✅ `COMPLETED` (已完成) |
 | **`TASK-09`** | 实现系统鼠标右键扩展菜单与远程目录选择器弹窗 (`mi-ui`) | **M4** | `TASK-07`, `TASK-08` | ✅ `COMPLETED` (已完成) |
 | **`TASK-10`** | 全链路集成测试、故障注入验证与交付打包 | **M4** | `TASK-01` ~ `TASK-09` | ✅ `COMPLETED` (已完成) |
+| **`TASK-11`** | 实现云端运维状态持久化、只读非续期 24H 流式缓存清理与心跳审计强化 | **M5** | `TASK-02`, `TASK-04` | ✅ `COMPLETED` (已完成) |
+| **`TASK-12`** | 实现控制面双 Token 鉴权、WebUI REST API 扩展与 `/ws/admin` 实时遥测网关 | **M5** | `TASK-11` | ✅ `COMPLETED` (已完成) |
+| **`TASK-13`** | 构建云端 WebUI TypeScript 前端工程与零 CDN 离线静态资源产物 | **M5** | `TASK-12` | ✅ `COMPLETED` (已完成) |
+| **`TASK-14`** | 更新容器化部署 (`Docker + Python>=3.11`)、打包配置与工程计划同步 | **M5** | `TASK-13` | ✅ `COMPLETED` (已完成) |
+| **`TASK-15`** | 执行 Cloud WebUI、双 Token 平面隔离、24H 缓存清理与持久化全链路测试验收 | **M5** | `TASK-11` ~ `TASK-14` | ✅ `COMPLETED` (已完成) |
 
 ---
 
@@ -223,3 +242,52 @@ flowchart LR
   1. 严格按照 **[TEST_AND_ACCEPTANCE.md](./TEST_AND_ACCEPTANCE.md)** 执行全部功能、断点续传故障注入、180s 连接释放及安全边界测试。
   2. 输出跨平台客户端安装包与 Python 云端一键启动脚本。
 * **准出标准**：所有 P0/P1 测试用例 100% 通过，无高危安全漏洞与句柄泄漏。
+
+---
+
+### 阶段五：M5 — 云端 WebUI 管理控制台与控制面治理 ([CLOUD_WEBUI_DESIGN_SPEC.md](./CLOUD_WEBUI_DESIGN_SPEC.md))
+
+#### `TASK-11`：实现云端运维状态持久化、只读非续期 24H 流式缓存清理与心跳审计强化 [✅ COMPLETED]
+* **负责模块**：`server/app/config.py`, `state_store.py`, `audit_logger.py`, `client_sub_manager.py`, `stream_tee_cache.py`
+* **优先级**：Tier 2 (`P0`) | **依赖**：`TASK-02`, `TASK-04`
+* **工作内容**：
+  1. 配置增加 `MI_SERVER_HOST` (`0.0.0.0`)、`MI_SERVER_PORT` (`8000`)、`MI_ADMIN_TOKEN`、`MI_CACHE_DIR`、`MI_CACHE_CLEANUP_INTERVAL_SECONDS`、`MI_UI_ENABLED`。
+  2. 实现 SQLite `HubStateStore` (`hub_state.db`)，持久化已注册设备、Topic/内容分类 ACL、集群轮转密钥及 SHA-256 哈希化的设备专属 Token 签发/吊销列表。
+  3. 强化 `StreamTeeCache`：增加只读非续期 `_peek_entry`，严格保证 24 小时 TTL 超时即清（含孤立 `.part`/`.cache`/`.meta.json`），增加 1-to-N 活跃消费者进度追踪 (`ReaderProgress`)。
+  4. 强化 `AuditLogger`：支持多维分页筛选、关键词搜索、摘要统计、近期通道活动聚合（不修改 Rust 客户端 180s 本地计时器）及 `PRAGMA wal_checkpoint(TRUNCATE)`。
+* **准出标准**：重启后 ACL、禁用状态与轮转集群密钥完整保留；24h 超期缓存严格淘汰。
+
+#### `TASK-12`：实现控制面双 Token 鉴权、WebUI REST API 扩展与 /ws/admin 实时遥测网关 [✅ COMPLETED]
+* **负责模块**：`server/app/api/auth.py`, `devices.py`, `cache.py`, `audit.py`, `system.py`, `main.py`
+* **优先级**：Tier 2 (`P0`) | **依赖**：`TASK-11`
+* **工作内容**：
+  1. 实现 `AdminAuthManager`：严禁 `127.0.0.1` 免鉴权；隔离控制面 `MI_ADMIN_TOKEN` 与数据面 `MI_CLUSTER_TOKEN`（已独立配置时用集群密钥登录管理端直接返回 HTTP `403`）；签名 `HttpOnly; SameSite=Strict` 会话 Cookie，轮转集群密钥不中断 WebUI 管理员会话。
+  2. 补全 `/api/v1/auth/*`、`/api/v1/overview`、`/api/v1/system/*`、`/api/v1/devices/{id}/*`、`/api/v1/security/tokens`、`/api/v1/cache/{sessions,prune,abort}` 与 `/api/v1/audit/{summary,export,logs}` 路由与 FastAPI ASGI 生命周期后台定期清理协程。
+  3. 实现客户端 WS 信令 `/ws/signaling`（即时踢出回调与心跳保活）及管理员实时遥测推送通道 `/ws/admin`（约 `250ms` 进度节流合并）。
+* **准出标准**：控制面与数据面密钥严格隔离；踢出/禁用指令立即中断对应客户端 WS 会话。
+
+#### `TASK-13`：构建云端 WebUI TypeScript 前端工程与零 CDN 离线静态资源产物 [✅ COMPLETED]
+* **负责模块**：`server/webui/` & `server/app/static/`
+* **优先级**：Tier 2 (`P1`) | **依赖**：`TASK-12`
+* **工作内容**：
+  1. 使用严格模式 TypeScript + Vite + Tailwind CSS v3 在 `server/webui/` 实现六大控制台视图（总览大屏与拓扑图、设备台账与 ACL 抽屉、边传边下双水位线与 24H TTL 监控、SQLite WAL 审计检索、Token 密钥安全中心、系统参数与 WAL 检查点运维）。
+  2. 预编译静态产物输出至 `server/app/static/` 并纳入版本控制，确保部署运行环境零 Node.js、零外部 CDN 请求。
+* **准出标准**：`tsc --noEmit` 零错误、`vite build` 成功产出 `server/app/static/index.html` 且无外网 CDN 链接。
+
+#### `TASK-14`：更新容器化部署 (`Docker + Python>=3.11`)、打包配置与工程计划同步 [✅ COMPLETED]
+* **负责模块**：`server/pyproject.toml`, `deploy/server/*`, `Makefile`, `.gitignore`, `scripts/task_guard.py`
+* **优先级**：Tier 2 (`P1`) | **依赖**：`TASK-13`
+* **工作内容**：
+  1. 配置 `server/pyproject.toml` 确保 wheel/sdist 打包包含 `app/static/**/*`。
+  2. 更新 `deploy/server/Dockerfile` 与 `docker-compose.yml`（Python >= 3.11、非回环 `0.0.0.0` 默认绑定、`MI_ADMIN_TOKEN` / `MI_CLUSTER_TOKEN` / `MI_CACHE_TTL_SECONDS=86400`、`HEALTHCHECK`）。
+  3. 在 `.gitignore` 忽略前端开发依赖 `node_modules`，在 `Makefile` 增加 `webui-*` 目标并同步 M5 任务锁。
+* **准出标准**：容器镜像保持零 Node.js 构建层与完整 `/healthz` 探针。
+
+#### `TASK-15`：执行 Cloud WebUI、双 Token 平面隔离、24H 缓存清理与持久化全链路测试验收 [✅ COMPLETED]
+* **负责模块**：`server/tests/`
+* **优先级**：Tier 1 (`P0`) | **依赖**：`TASK-11` ~ `TASK-14`
+* **工作内容**：
+  1. 新增 `server/tests/test_webui_api.py`，覆盖：非 `127.0.0.1` 强制鉴权、双 Token 平面隔离与 `403` 越权拒绝、轮转保持管理员会话、`HubStateStore` 重启持久恢复、24H 缓存只读不续期与超时/孤立碎片清理、审计分页导出、WAL 检查点、离线零 CDN 静态产物校验及 FastAPI `TestClient` 端到端路由/WS 契约测试。
+  2. 执行全量回归测试并更新任务锁与验收报告。
+* **准出标准**：所有本地可执行单测与 L1~L4 回归 100% 通过。
+

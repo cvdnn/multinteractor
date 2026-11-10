@@ -106,6 +106,111 @@ class TestClientSubscriptionManager(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_token_rotation_and_device_management(self) -> None:
+        """安全测试：集群 Token 轮转吊销旧密钥、设备禁用/下线踢出与注销删除."""
+
+        async def _run() -> None:
+            old_token = self.hub.config.shared_auth_token
+
+            # 1. 使用旧 Token 注册 node_1 -> 成功
+            dev1 = await self.hub.register_ws_client(
+                "node_1", "Node-1", "macos", "192.168.1.50:8443", auth_token=old_token
+            )
+            self.assertTrue(dev1.online)
+            self.assertTrue(dev1.enabled)
+
+            # 2. 轮转集群密钥
+            rotation_res = self.hub.rotate_cluster_token()
+            new_token = rotation_res["token"]
+            self.assertNotEqual(old_token, new_token)
+
+            # 3. 再次使用旧 Token 注册 node_2 -> 必须被拒绝 (AUTH_FAILED)
+            with self.assertRaises(PermissionDeniedError):
+                await self.hub.register_ws_client(
+                    "node_2", "Node-2", "windows", "192.168.1.51:8443", auth_token=old_token
+                )
+
+            # 4. 使用新 Token 注册 node_2 -> 成功
+            dev2 = await self.hub.register_ws_client(
+                "node_2", "Node-2", "windows", "192.168.1.51:8443", auth_token=new_token
+            )
+            self.assertTrue(dev2.online)
+
+            # 5. 管理员禁用 node_1 -> 立即强制断开会话
+            await self.hub.disable_device("node_1")
+            self.assertFalse(dev1.online)
+            self.assertFalse(dev1.enabled)
+
+            # 6. 被禁用的 node_1 尝试重连 (即便携带新 Token) -> 必须被拒绝 (DEVICE_DISABLED)
+            with self.assertRaises(PermissionDeniedError) as cm:
+                await self.hub.register_ws_client(
+                    "node_1", "Node-1", "macos", "192.168.1.50:8443", auth_token=new_token
+                )
+            self.assertIn("Device is disabled", str(cm.exception))
+
+            # 7. 重新启用 node_1 -> 恢复准入
+            self.hub.enable_device("node_1")
+            dev1_re = await self.hub.register_ws_client(
+                "node_1", "Node-1", "macos", "192.168.1.50:8443", auth_token=new_token
+            )
+            self.assertTrue(dev1_re.online)
+            self.assertTrue(dev1_re.enabled)
+
+            # 8. 踢出在线连接 (KICK) -> 迫使离线
+            kicked = await self.hub.kick_device("node_1")
+            self.assertTrue(kicked)
+            self.assertFalse(dev1_re.online)
+
+            # 9. 彻底注销并删除设备 (REMOVE) -> 从台账完全清除
+            removed = await self.hub.remove_device("node_1")
+            self.assertTrue(removed)
+            device_ids = [d["device_id"] for d in self.hub.devices_api.list_devices()]
+            self.assertNotIn("node_1", device_ids)
+
+        asyncio.run(_run())
+
+    def test_topic_acl_cross_device_blocked(self) -> None:
+        """安全测试：Topic 级 ACL 访问控制，严禁越权订阅他人私有 RPC 与定向同步频道."""
+
+        async def _run() -> None:
+            token = self.hub.config.shared_auth_token
+
+            # 1. 注册时企图订阅他人私有 RPC 频道 `topic.rpc.fs.node_victim` -> 拒绝
+            with self.assertRaises(PermissionDeniedError) as cm:
+                await self.hub.register_ws_client(
+                    "node_attacker",
+                    "Attacker",
+                    "linux",
+                    "10.0.0.1:8443",
+                    auth_token=token,
+                    extra_topics=["topic.rpc.fs.node_victim"],
+                )
+            self.assertIn("not authorized to subscribe", str(cm.exception))
+
+            # 2. 正常注册后，尝试动态订阅他人定向同步频道 `topic.sync.direct.node_victim` -> 拒绝
+            attacker = await self.hub.register_ws_client(
+                "node_attacker",
+                "Attacker",
+                "linux",
+                "10.0.0.1:8443",
+                auth_token=token,
+            )
+            with self.assertRaises(PermissionDeniedError) as cm:
+                self.hub.sub_manager.update_subscription(
+                    "node_attacker",
+                    subscribe_topics=["topic.sync.direct.node_victim"],
+                )
+            self.assertIn("not authorized to subscribe", str(cm.exception))
+
+            # 3. 订阅自己本机的私有频道 -> 允许
+            self.hub.sub_manager.update_subscription(
+                "node_attacker",
+                subscribe_topics=["topic.sync.direct.node_attacker"],
+            )
+            self.assertIn("topic.sync.direct.node_attacker", attacker.subscribed_topics)
+
+        asyncio.run(_run())
+
 
 if __name__ == "__main__":
     unittest.main()

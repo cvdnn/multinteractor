@@ -2,7 +2,7 @@
   "active_task_id": null,
   "locked_scopes": [],
   "lock_acquired_at": null,
-  "updated_at": "2026-11-05T19:12:20+08:00",
+  "updated_at": "2026-11-10T11:58:07+08:00",
   "tasks": {
     "TASK-01": {
       "task_id": "TASK-01",
@@ -373,6 +373,214 @@
         "deploy/server/docker-compose.yml": "80863b2e78ecc2d7f4b7574dbe4e92e97275c5dcdd9a2631b3ba9b86d8089f12",
         "deploy/server/multinteractor-hub.service": "566ae9f0db67f744b430809c9b98a3f56e3b5e2757731e09e3d099020327cec4",
         "Makefile": "692d06344119571dbbb0663e9235b25d1dba0eafb8ec0d51ca1e58d1819e48f7"
+      }
+    },
+    "TASK-11": {
+      "task_id": "TASK-11",
+      "name": "实现云端运维状态持久化、只读非续期 24H 流式缓存清理与心跳审计强化",
+      "milestone": "M5",
+      "depends_on": [
+        "TASK-02",
+        "TASK-04"
+      ],
+      "scopes": [
+        "server/app/config.py",
+        "server/app/state_store.py",
+        "server/app/audit_logger.py",
+        "server/app/client_sub_manager.py",
+        "server/app/stream_tee_cache.py"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-10T11:56:20+08:00",
+      "completed_at": "2026-11-10T11:56:43+08:00",
+      "pre_snapshot": {
+        "server/app/config.py": "78f929be53cfabcfa6a11fb2d72d58af977be60b843158e6915427ac7e689021",
+        "server/app/state_store.py": "3d7d1053f2a4c87492f6baf3a6bab66e53f1824de52aae4f6757c4d719d025db",
+        "server/app/audit_logger.py": "4fa5bcfc3c2844e45b486127139339441a99d6824a0a1c295b524af31b208a95",
+        "server/app/client_sub_manager.py": "c036d37ec38d8a5c2cde572ec7fa540a76c41d880a53197b44c275fdfa02ee56",
+        "server/app/stream_tee_cache.py": "5fa55bfd7b9a199789c22e4be850f6d8c0d6aabe5544574db3cc118329add3d2"
+      },
+      "post_snapshot": {
+        "server/app/config.py": "78f929be53cfabcfa6a11fb2d72d58af977be60b843158e6915427ac7e689021",
+        "server/app/state_store.py": "3d7d1053f2a4c87492f6baf3a6bab66e53f1824de52aae4f6757c4d719d025db",
+        "server/app/audit_logger.py": "4fa5bcfc3c2844e45b486127139339441a99d6824a0a1c295b524af31b208a95",
+        "server/app/client_sub_manager.py": "c036d37ec38d8a5c2cde572ec7fa540a76c41d880a53197b44c275fdfa02ee56",
+        "server/app/stream_tee_cache.py": "5fa55bfd7b9a199789c22e4be850f6d8c0d6aabe5544574db3cc118329add3d2"
+      }
+    },
+    "TASK-12": {
+      "task_id": "TASK-12",
+      "name": "实现控制面双 Token 鉴权、WebUI REST API 扩展与 /ws/admin 实时遥测网关",
+      "milestone": "M5",
+      "depends_on": [
+        "TASK-11"
+      ],
+      "scopes": [
+        "server/app/api/auth.py",
+        "server/app/api/devices.py",
+        "server/app/api/cache.py",
+        "server/app/api/audit.py",
+        "server/app/api/system.py",
+        "server/app/main.py"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-10T11:56:53+08:00",
+      "completed_at": "2026-11-10T11:57:02+08:00",
+      "pre_snapshot": {
+        "server/app/api/auth.py": "2ef31b043a5e60bc5902cd1baf8a45c778a2b8236989d596fc3056bafe686b81",
+        "server/app/api/devices.py": "ead4e86a5907e788cb286a937de30bb40bfa8aae0a8bb846d0e942dd0d4fbf65",
+        "server/app/api/cache.py": "d2c7544018586f91028185a874677255eb6a0e720715e6d5efe4af96c32aa256",
+        "server/app/api/audit.py": "5348057722bf005c0c243d800e5e5d97079b45d308ea1dc06d11306abfe3b484",
+        "server/app/api/system.py": "380d4f104c06f182821b0bc60dcabeaa2937d430ad62a831a4cb0fa1d14cbbd2",
+        "server/app/main.py": "88d779636192056ed9c6feea0826bb0ef5b7bbc6d937796c9aaf41911b892feb"
+      },
+      "post_snapshot": {
+        "server/app/api/auth.py": "2ef31b043a5e60bc5902cd1baf8a45c778a2b8236989d596fc3056bafe686b81",
+        "server/app/api/devices.py": "ead4e86a5907e788cb286a937de30bb40bfa8aae0a8bb846d0e942dd0d4fbf65",
+        "server/app/api/cache.py": "d2c7544018586f91028185a874677255eb6a0e720715e6d5efe4af96c32aa256",
+        "server/app/api/audit.py": "5348057722bf005c0c243d800e5e5d97079b45d308ea1dc06d11306abfe3b484",
+        "server/app/api/system.py": "380d4f104c06f182821b0bc60dcabeaa2937d430ad62a831a4cb0fa1d14cbbd2",
+        "server/app/main.py": "88d779636192056ed9c6feea0826bb0ef5b7bbc6d937796c9aaf41911b892feb"
+      }
+    },
+    "TASK-13": {
+      "task_id": "TASK-13",
+      "name": "构建云端 WebUI TypeScript 前端工程与零 CDN 离线静态资源产物",
+      "milestone": "M5",
+      "depends_on": [
+        "TASK-12"
+      ],
+      "scopes": [
+        "server/webui",
+        "server/app/static"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-10T11:57:07+08:00",
+      "completed_at": "2026-11-10T11:57:22+08:00",
+      "pre_snapshot": {
+        "server/webui/index.html": "4865a03337aba437e78f0d93b3cc31ac536d6aea8c8fe3df220cc0773c2f3b89",
+        "server/webui/package-lock.json": "525e69c23dcfe8f2ebd77395d09d1ad1f0e070f32e40b4ed07516ab56354337d",
+        "server/webui/package.json": "5a902874016e1887105747ecdb468f7da77406163569b9e60d57b2d1a3a83dac",
+        "server/webui/postcss.config.js": "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc",
+        "server/webui/src/api.ts": "689b81aad04223f727e8810f18a8bfe47a2f32a7d2e4b263b270ba877da63ab3",
+        "server/webui/src/components/authGate.ts": "452c97c4a2629bb876e5b0c839ebbcd555475caa2c7ebb7c8bfa46d01d509906",
+        "server/webui/src/components/modals.ts": "e7d50af67968b11fabb6a13e9518eeafc56dee4dd66f6b19a4f9c2baec05f802",
+        "server/webui/src/components/toast.ts": "2e315795c2f8ca7c4bd466f341657cb2aa674a816df80bcfd0627a45682b4878",
+        "server/webui/src/main.ts": "5b6f0bbd6405e5526869a396600e3880cfb76b1b488eed947a71e5a6c2efb454",
+        "server/webui/src/styles/main.css": "0208014e9be5913ec0ab8a1dcd00c0d8bf996f407b13097d5d7884883de32ef3",
+        "server/webui/src/types.ts": "d5f1e473c933944714f34364191b431607f6b9411240715a2ed082332c41599a",
+        "server/webui/src/utils.ts": "06b3083097e46c7c3ca72a4c90b4c257e24274c9fa8857c15714ad8767be22b2",
+        "server/webui/src/views/audit.ts": "a9717e856dfd787b80565d6eb7fd997fc9bb2c55d07188535c23fcfecd3e7138",
+        "server/webui/src/views/devices.ts": "52881c8ea008ca1060dbd137a5ae883e78a903cc91b639221d1bfb521d4c185d",
+        "server/webui/src/views/overview.ts": "1ece8ddee86130f4474bb0238e708aac28467b526214ce8d45f6fcfdab7598e4",
+        "server/webui/src/views/security.ts": "2d0d33e25bfcadcbef37d037f76301ad1643174605e67fd16bef25b675e3ef99",
+        "server/webui/src/views/settings.ts": "b53f0f098661b3cd2a2dd39204bcb6adb651b92b177aa181c1315db9a8b7a5a2",
+        "server/webui/src/views/stream.ts": "9312fb92c3c7b200bc5807dd6bba56160d9b0333c38c75c5949961586b922828",
+        "server/webui/tailwind.config.js": "0fdcba73f5596b53e330ff675266e583b8365530f1ceaa00fc411fe341350048",
+        "server/webui/tsconfig.json": "2b8c261bb2ccbbbcd424d3e7535857cddf66ee248da79e6be870d47b72fc3c77",
+        "server/webui/vite.config.ts": "8441df8cccababc03be2ab30ed1d0160141925775cd2fdfa00f9f0955c8df0d0",
+        "server/app/static/assets/index-BO3As705.js": "72e6045de5d1cd7784a59b3149010f52031cfd237e4ffafb492a71cd56c5a71e",
+        "server/app/static/assets/index-ufseb0oS.css": "b25f40e32e220635c6bc40e49d80588c329cf60c5a3a0094fb815fd6ea1f1c20",
+        "server/app/static/index.html": "ef7c7c49a556ad28f1362cb25c9fac0ffd1d473e3fb3c1a9224124e654af87c1"
+      },
+      "post_snapshot": {
+        "server/webui/index.html": "4865a03337aba437e78f0d93b3cc31ac536d6aea8c8fe3df220cc0773c2f3b89",
+        "server/webui/package-lock.json": "525e69c23dcfe8f2ebd77395d09d1ad1f0e070f32e40b4ed07516ab56354337d",
+        "server/webui/package.json": "5a902874016e1887105747ecdb468f7da77406163569b9e60d57b2d1a3a83dac",
+        "server/webui/postcss.config.js": "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc",
+        "server/webui/src/api.ts": "689b81aad04223f727e8810f18a8bfe47a2f32a7d2e4b263b270ba877da63ab3",
+        "server/webui/src/components/authGate.ts": "452c97c4a2629bb876e5b0c839ebbcd555475caa2c7ebb7c8bfa46d01d509906",
+        "server/webui/src/components/modals.ts": "e7d50af67968b11fabb6a13e9518eeafc56dee4dd66f6b19a4f9c2baec05f802",
+        "server/webui/src/components/toast.ts": "2e315795c2f8ca7c4bd466f341657cb2aa674a816df80bcfd0627a45682b4878",
+        "server/webui/src/main.ts": "5b6f0bbd6405e5526869a396600e3880cfb76b1b488eed947a71e5a6c2efb454",
+        "server/webui/src/styles/main.css": "0208014e9be5913ec0ab8a1dcd00c0d8bf996f407b13097d5d7884883de32ef3",
+        "server/webui/src/types.ts": "d5f1e473c933944714f34364191b431607f6b9411240715a2ed082332c41599a",
+        "server/webui/src/utils.ts": "06b3083097e46c7c3ca72a4c90b4c257e24274c9fa8857c15714ad8767be22b2",
+        "server/webui/src/views/audit.ts": "a9717e856dfd787b80565d6eb7fd997fc9bb2c55d07188535c23fcfecd3e7138",
+        "server/webui/src/views/devices.ts": "52881c8ea008ca1060dbd137a5ae883e78a903cc91b639221d1bfb521d4c185d",
+        "server/webui/src/views/overview.ts": "1ece8ddee86130f4474bb0238e708aac28467b526214ce8d45f6fcfdab7598e4",
+        "server/webui/src/views/security.ts": "2d0d33e25bfcadcbef37d037f76301ad1643174605e67fd16bef25b675e3ef99",
+        "server/webui/src/views/settings.ts": "b53f0f098661b3cd2a2dd39204bcb6adb651b92b177aa181c1315db9a8b7a5a2",
+        "server/webui/src/views/stream.ts": "9312fb92c3c7b200bc5807dd6bba56160d9b0333c38c75c5949961586b922828",
+        "server/webui/tailwind.config.js": "0fdcba73f5596b53e330ff675266e583b8365530f1ceaa00fc411fe341350048",
+        "server/webui/tsconfig.json": "2b8c261bb2ccbbbcd424d3e7535857cddf66ee248da79e6be870d47b72fc3c77",
+        "server/webui/vite.config.ts": "8441df8cccababc03be2ab30ed1d0160141925775cd2fdfa00f9f0955c8df0d0",
+        "server/app/static/assets/index-BO3As705.js": "72e6045de5d1cd7784a59b3149010f52031cfd237e4ffafb492a71cd56c5a71e",
+        "server/app/static/assets/index-ufseb0oS.css": "b25f40e32e220635c6bc40e49d80588c329cf60c5a3a0094fb815fd6ea1f1c20",
+        "server/app/static/index.html": "ef7c7c49a556ad28f1362cb25c9fac0ffd1d473e3fb3c1a9224124e654af87c1"
+      }
+    },
+    "TASK-14": {
+      "task_id": "TASK-14",
+      "name": "更新容器化部署 (Docker + Python>=3.11)、打包配置与工程计划同步",
+      "milestone": "M5",
+      "depends_on": [
+        "TASK-13"
+      ],
+      "scopes": [
+        "server/pyproject.toml",
+        "server/README.md",
+        "deploy/server",
+        ".gitignore",
+        "Makefile",
+        "scripts/task_guard.py",
+        "doc/IMPLEMENTATION_PLAN.md"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-10T11:57:33+08:00",
+      "completed_at": "2026-11-10T11:57:44+08:00",
+      "pre_snapshot": {
+        "server/pyproject.toml": "34e439c5b6577feaae656ebf0d3a7762728881240299bbfa8fd0c123575bc93d",
+        "server/README.md": "a3ec14d924bb9b6c153e5a9742cf565321d78eccd9296fc50efa47959e28613f",
+        "deploy/server/Dockerfile": "9566856b604cf1770b4bc5167645dc9752d7fc46bed50caba0097c05c60b49b6",
+        "deploy/server/docker-compose.yml": "cc8b27005f127b2ea65a35049c6f2e595f170d1f5b6fa2f60b3979a1f18abdcd",
+        "deploy/server/multinteractor-hub.service": "566ae9f0db67f744b430809c9b98a3f56e3b5e2757731e09e3d099020327cec4",
+        ".gitignore": "b5988b9d369ff698768c00249e272b2b3cd470aa6db7e336649c539035dc0531",
+        "Makefile": "94f09d627917d7648b309293de4ca09b1b50ed70b478fb776d9ff446875d434b",
+        "scripts/task_guard.py": "3347f1725a791150014df0ff4e7788ef0cab9cc44b1fb84419df6967cef867c8",
+        "doc/IMPLEMENTATION_PLAN.md": "021bc25c699a6e814fcf3a1e4e19f804ca4e7927ab4c05483ab34532c34c7fd0"
+      },
+      "post_snapshot": {
+        "server/pyproject.toml": "34e439c5b6577feaae656ebf0d3a7762728881240299bbfa8fd0c123575bc93d",
+        "server/README.md": "a3ec14d924bb9b6c153e5a9742cf565321d78eccd9296fc50efa47959e28613f",
+        "deploy/server/Dockerfile": "9566856b604cf1770b4bc5167645dc9752d7fc46bed50caba0097c05c60b49b6",
+        "deploy/server/docker-compose.yml": "cc8b27005f127b2ea65a35049c6f2e595f170d1f5b6fa2f60b3979a1f18abdcd",
+        "deploy/server/multinteractor-hub.service": "566ae9f0db67f744b430809c9b98a3f56e3b5e2757731e09e3d099020327cec4",
+        ".gitignore": "b5988b9d369ff698768c00249e272b2b3cd470aa6db7e336649c539035dc0531",
+        "Makefile": "94f09d627917d7648b309293de4ca09b1b50ed70b478fb776d9ff446875d434b",
+        "scripts/task_guard.py": "3347f1725a791150014df0ff4e7788ef0cab9cc44b1fb84419df6967cef867c8",
+        "doc/IMPLEMENTATION_PLAN.md": "e017c02644301add2a14717f96bf93dc97687ff6461203392a4fdfee850062ca"
+      }
+    },
+    "TASK-15": {
+      "task_id": "TASK-15",
+      "name": "执行 Cloud WebUI、双 Token 平面隔离、24H 缓存清理与持久化全链路测试验收",
+      "milestone": "M5",
+      "depends_on": [
+        "TASK-11",
+        "TASK-12",
+        "TASK-13",
+        "TASK-14"
+      ],
+      "scopes": [
+        "server/tests"
+      ],
+      "status": "COMPLETED",
+      "started_at": "2026-11-10T11:57:51+08:00",
+      "completed_at": "2026-11-10T11:58:07+08:00",
+      "pre_snapshot": {
+        "server/tests/conftest.py": "2f3904336a600537907e93ba358f18c0948dea47925fe465cd382a0e034518b3",
+        "server/tests/test_audit_logger.py": "576b6edce30018aac093564fccf8667dbd55cf58ea484bd0c890b47229198739",
+        "server/tests/test_client_sub_manager.py": "6b51889e3438bbc91b2fa60c6a23a57c8306946cecf97edaddbf2f4c68748e34",
+        "server/tests/test_stream_tee_cache.py": "b5499b6243a8b8db8671a363483923a39d22a095b93437dc0450df511b08019e",
+        "server/tests/test_webui_api.py": "d3f9209d4efea81083f54b58afc2381746f3be9f227797dd2aaa25f0945b00a4"
+      },
+      "post_snapshot": {
+        "server/tests/conftest.py": "2f3904336a600537907e93ba358f18c0948dea47925fe465cd382a0e034518b3",
+        "server/tests/test_audit_logger.py": "576b6edce30018aac093564fccf8667dbd55cf58ea484bd0c890b47229198739",
+        "server/tests/test_client_sub_manager.py": "6b51889e3438bbc91b2fa60c6a23a57c8306946cecf97edaddbf2f4c68748e34",
+        "server/tests/test_stream_tee_cache.py": "b5499b6243a8b8db8671a363483923a39d22a095b93437dc0450df511b08019e",
+        "server/tests/test_webui_api.py": "d3f9209d4efea81083f54b58afc2381746f3be9f227797dd2aaa25f0945b00a4"
       }
     }
   }

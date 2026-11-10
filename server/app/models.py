@@ -22,6 +22,26 @@ except ImportError:
 SPEC_VERSION_V6 = "v6"
 DEFAULT_CHUNK_SIZE_BYTES = 4 * 1024 * 1024  # 4 MB
 
+# 集中式协议硬性上限常量 (Defensive Protocol Limits)
+MAX_HELLO_FRAME_SIZE = 1024  # 1 KB (握手与注册帧上限)
+MAX_INLINE_DATA_SIZE = 1024 * 1024  # 1 MB (剪贴板文本内联上限)
+MAX_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MB (单分块物理尺寸上限)
+MAX_TRANSFER_TOTAL_SIZE = 100 * 1024 * 1024 * 1024  # 100 GB (单任务配额上限)
+MAX_PATH_LENGTH = 1024  # 路径长度上限
+
+import re
+
+_CACHE_ID_REGEX = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def validate_file_cache_id(file_cache_id: str) -> None:
+    """防路径穿越与非法注入：校验 file_cache_id 仅允许 1-64 位字母、数字、下划线及减号."""
+    if not isinstance(file_cache_id, str) or not _CACHE_ID_REGEX.match(file_cache_id):
+        raise ValueError(
+            f"Invalid file_cache_id: '{file_cache_id}'. Must be 1-64 characters [A-Za-z0-9_-]."
+        )
+
+
 TOPIC_CLIPBOARD_BROADCAST = "topic.clipboard.broadcast"
 TOPIC_SYSTEM_PRESENCE = "topic.system.presence"
 
@@ -231,11 +251,18 @@ class DigestManifest:
     def from_dict(cls, raw: Dict[str, Any]) -> "DigestManifest":
         if raw.get("algorithm") != "blake3":
             raise ValueError(f"Unsupported digest algorithm: {raw.get('algorithm')}")
+        chunk_size = int(raw.get("chunk_size_bytes", DEFAULT_CHUNK_SIZE_BYTES))
+        if chunk_size <= 0 or chunk_size > MAX_CHUNK_SIZE:
+            raise ValueError(f"chunk_size_bytes must be between 1 and {MAX_CHUNK_SIZE}, got {chunk_size}")
+        hashes = [str(h) for h in raw.get("chunk_hashes", [])]
+        max_chunks = (MAX_TRANSFER_TOTAL_SIZE // chunk_size) + 1
+        if len(hashes) > max_chunks:
+            raise ValueError(f"Too many chunk hashes: {len(hashes)} > {max_chunks}")
         return cls(
             algorithm=str(raw["algorithm"]),
             full_hash=str(raw["full_hash"]),
-            chunk_size_bytes=int(raw.get("chunk_size_bytes", DEFAULT_CHUNK_SIZE_BYTES)),
-            chunk_hashes=[str(h) for h in raw.get("chunk_hashes", [])],
+            chunk_size_bytes=chunk_size,
+            chunk_hashes=hashes,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -323,11 +350,17 @@ class EventPayload:
         cat = str(raw["content_category"])
         if cat not in ("TEXT", "IMAGE", "FILE", "DIRECTORY"):
             raise ValueError(f"Invalid content_category: {cat}")
+        file_cache_id = raw.get("file_cache_id")
+        if file_cache_id is not None:
+            validate_file_cache_id(file_cache_id)
+        inline_data = raw.get("inline_data")
+        if inline_data is not None and len(inline_data.encode("utf-8")) > MAX_INLINE_DATA_SIZE:
+            raise ValueError(f"inline_data exceeds limit of {MAX_INLINE_DATA_SIZE} bytes")
         return cls(
             content_category=cat,
             digest=DigestManifest.from_dict(raw["digest"]),
-            inline_data=raw.get("inline_data"),
-            file_cache_id=raw.get("file_cache_id"),
+            inline_data=inline_data,
+            file_cache_id=file_cache_id,
             upload_state=str(raw.get("upload_state", "INLINE")),
             items_meta=[ItemMeta.from_dict(m) for m in raw.get("items_meta", [])],
             destination_override=raw.get("destination_override"),

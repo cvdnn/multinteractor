@@ -332,7 +332,8 @@ sequenceDiagram
 
 ```text
 multinteractor/
-├── REQUIREMENTS.md                          # 正式需求规格说明书
+├── doc/                                     # 项目系统设计、需求、计划与规格文档集
+│   └── REQUIREMENTS.md                      # 正式需求规格说明书
 ├── .agents/
 │   └── skills/
 │       └── multinteractor/

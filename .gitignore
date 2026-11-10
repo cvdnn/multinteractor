@@ -36,3 +36,7 @@ Thumbs.db
 .vscode/
 .task_state.json
 .task_state.lock
+
+# WebUI (dev-time TypeScript/Vite deps only; server/app/static/ is committed)
+server/webui/node_modules/
+server/webui/.vite/

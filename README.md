@@ -77,8 +77,17 @@ flowchart TB
 ```text
 multinteractor/
 ├── .agents/skills/multinteractor/SKILL.md   # AI 智能体跨机协同标准技能定义
-├── server/                                  # Python 云端中心服务 (信令网关 + 边传边下缓存 + SQLite 审计)
-│   ├── app/                                 # FastAPI 应用、订阅管理、Stream Teeing 引擎与审计模块
+├── doc/                                     # 项目系统设计、需求、计划与规格文档集
+│   ├── REQUIREMENTS.md                      # 需求规格说明书 (PRD & SRS v6)
+│   ├── PROJECT_STRUCTURE.md                 # 项目架构与模块边界规范
+│   ├── IMPLEMENTATION_PLAN.md               # 分阶段工程实施计划
+│   ├── TEST_AND_ACCEPTANCE.md               # 测试金字塔与验收标准说明书
+│   ├── OPTIMIZATION_AND_SECURITY_DESIGN.md  # 系统技术优化设计与安全加固规范
+│   ├── UI_DESIGN_SPEC.md                    # 客户端界面设计规范 (Deskflow 模式剖析与交互设计)
+│   └── CLOUD_WEBUI_DESIGN_SPEC.md           # 云端 WebUI 管理控制台系统设计说明书
+├── server/                                  # Python 云端中心服务 (信令网关 + 边传边下缓存 + SQLite 审计 + WebUI)
+│   ├── app/                                 # FastAPI 应用、订阅管理、Stream Teeing 引擎、审计模块与静态产物 (app/static/)
+│   ├── webui/                               # 云端管理控制台前端源码 (TypeScript + Vite + Tailwind CSS)
 │   └── tests/                               # 服务端单元测试
 ├── client/                                  # Rust 客户端 Cargo Workspace
 │   └── crates/
@@ -90,10 +99,6 @@ multinteractor/
 ├── tests/                                   # L1~L4 全链路测试套件 (契约夹具 / 集成 / 混沌故障注入 / E2E 验收)
 ├── deploy/                                  # Docker / Systemd / Windows 服务与右键菜单 / macOS LaunchAgent 部署模板
 ├── Makefile                                 # 统一构建、开发启动与测试入口
-├── REQUIREMENTS.md                          # 需求规格说明书 (PRD & SRS v6)
-├── PROJECT_STRUCTURE.md                     # 项目架构与模块边界规范
-├── IMPLEMENTATION_PLAN.md                   # 分阶段工程实施计划
-├── TEST_AND_ACCEPTANCE.md                   # 测试金字塔与验收标准说明书
 └── LICENSE                                  # Apache-2.0 开源许可证
 ```
 
@@ -129,13 +134,13 @@ multinteractor/
 2. 若使用宿主机 Python 环境（需 Python >= 3.11）：
    - 在 `server/` 下创建虚拟环境并安装依赖 `pip install -e .`。
    - 参考 `deploy/server/multinteractor-hub.service` 配置 Systemd 守护进程并启动（或使用 `make server-dev` 启动）。
-3. 检查 `8000` 端口监听状态，确认服务健康运行并告知我客户端连接所需的服务端地址与 Token 配置。
+3. 检查 `8000` 端口监听状态，确认服务健康运行并告知我客户端连接所需的服务端地址、Token 配置及 WebUI 管理控制台地址（`http://<服务器IP>:8000/ui`）。
 ```
 
 ### 场景三：全栈本地联调与自动化验收（开发者 / 贡献者）
 
 ```text
-请读取仓库根目录的 Makefile 与 PROJECT_STRUCTURE.md，帮我完成 multinteractor 全栈开发环境初始化与自检：
+请读取仓库的 Makefile 与 doc/PROJECT_STRUCTURE.md，帮我完成 multinteractor 全栈开发环境初始化与自检：
 1. 检查 Python >= 3.11 与 Rust Cargo 环境。
 2. 运行 `make client-check` 与 `make server-test` 验证客户端与服务端基础模块。
 3. 运行 `make test-all` 执行 L1~L4 全链路测试套件（含协议黄金样本对齐、Stream Teeing 边传边下、断网断点续传、180s 空闲断连与 CLI/Skill 端到端测试），并向我汇报测试结果。
@@ -152,7 +157,7 @@ multinteractor/
 
 ### 2. 启动云端中心服务
 
-使用 `Makefile` 一键启动本地开发服务端（默认监听 `0.0.0.0:8000`）：
+使用 `Makefile` 一键启动本地开发服务端（默认监听 `0.0.0.0:8000`，启动后可直接访问 `http://127.0.0.1:8000/ui` 打开云端 WebUI 管理控制台）：
 
 ```bash
 make server-dev
@@ -170,10 +175,14 @@ docker compose -f deploy/server/docker-compose.yml up -d
 | :--- | :--- | :--- |
 | `MI_SERVER_HOST` | `0.0.0.0` | 服务端监听地址 |
 | `MI_SERVER_PORT` | `8000` | 服务端监听端口 |
-| `MI_CLUSTER_TOKEN` | `dev-secret-token` | 设备注册准入预共享密钥（PSK / Token） |
-| `MI_CACHE_DIR` | `./.mi_cache` | 云端流式缓存池落盘目录 |
+| `MI_SERVER_DATA_DIR` | `/tmp/multinteractor-server` | SQLite 审计库、状态库与流式缓存根目录 |
+| `MI_CLUSTER_TOKEN` | `mi-personal-secret-token-2026` | 数据面设备注册与流式传输预共享密钥（PSK / Token） |
+| `MI_ADMIN_TOKEN` | 空（回退至 `MI_CLUSTER_TOKEN`） | 控制面独立管理员密钥（强烈建议公网部署时单独配置以实现平面隔离） |
+| `MI_UI_ENABLED` | `true` | 是否启用内置 `/ui` 云端 WebUI 管理控制台 |
+| `MI_CACHE_DIR` | `<MI_SERVER_DATA_DIR>/stream_cache` | 云端流式缓存池落盘目录（可选覆盖） |
 | `MI_CACHE_TTL_SECONDS` | `86400` | 缓存文件过期清理时间（默认 24 小时） |
 | `MI_CACHE_MAX_BYTES` | `10737418240` | 云端缓存池最大容量配额（默认 10 GB） |
+| `MI_AUDIT_RETENTION_DAYS` | `90` | SQLite 审计日志自动保留天数 |
 
 ### 3. 编译与运行客户端
 
@@ -228,16 +237,18 @@ make client-test
 make test-all
 ```
 
-更多测试设计与验收指标请参考 [`TEST_AND_ACCEPTANCE.md`](./TEST_AND_ACCEPTANCE.md)。
+更多测试设计与验收指标请参考 [`TEST_AND_ACCEPTANCE.md`](./doc/TEST_AND_ACCEPTANCE.md)。
 
 ---
 
 ## 架构与工程文档索引
 
-- **[需求规格说明书 (`REQUIREMENTS.md`)](./REQUIREMENTS.md)**：完整的业务背景、系统架构、协议规范与功能/非功能性需求定义。
-- **[项目目录结构规范 (`PROJECT_STRUCTURE.md`)](./PROJECT_STRUCTURE.md)**：Monorepo 模块职责边界、单向依赖规则与子系统详解。
-- **[工程落地计划 (`IMPLEMENTATION_PLAN.md`)](./IMPLEMENTATION_PLAN.md)**：任务拆解、依赖拓扑与分阶段交付路线图。
-- **[测试与验收规格说明书 (`TEST_AND_ACCEPTANCE.md`)](./TEST_AND_ACCEPTANCE.md)**：测试金字塔、混沌测试场景与验收准则。
+- **[需求规格说明书 (`REQUIREMENTS.md`)](./doc/REQUIREMENTS.md)**：完整的业务背景、系统架构、协议规范与功能/非功能性需求定义。
+- **[项目目录结构规范 (`PROJECT_STRUCTURE.md`)](./doc/PROJECT_STRUCTURE.md)**：Monorepo 模块职责边界、单向依赖规则与子系统详解。
+- **[工程落地计划 (`IMPLEMENTATION_PLAN.md`)](./doc/IMPLEMENTATION_PLAN.md)**：任务拆解、依赖拓扑与分阶段交付路线图。
+- **[测试与验收规格说明书 (`TEST_AND_ACCEPTANCE.md`)](./doc/TEST_AND_ACCEPTANCE.md)**：测试金字塔、混沌测试场景与验收准则。
+- **[技术优化与安全加固规范 (`OPTIMIZATION_AND_SECURITY_DESIGN.md`)](./doc/OPTIMIZATION_AND_SECURITY_DESIGN.md)**：公网 TLS 证书指纹固定、协议防御边界、流式背压与设备管理技术方案。
+- **[客户端界面设计规范 (`UI_DESIGN_SPEC.md`)](./doc/UI_DESIGN_SPEC.md)**：Deskflow KVM 模式剖析与 multinteractor 跨机数据流协同客户端界面设计。
 - **[AI 智能体技能定义 (`SKILL.md`)](./.agents/skills/multinteractor/SKILL.md)**：智能体跨设备协同标准工作流与异常处理手册。
 
 ---
