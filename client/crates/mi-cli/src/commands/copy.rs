@@ -21,11 +21,24 @@ pub fn execute_local_copy(
     }
     if let Some(p) = path {
         let target = Path::new(p);
+        if target.is_dir() {
+            let mut acc_bytes = Vec::new();
+            let mut total_size = 0u64;
+            collect_dir_digest_material(target, &mut acc_bytes, &mut total_size)?;
+            let digest = DigestManifest::from_bytes(&acc_bytes);
+            return Ok(IpcCopyResponse {
+                event_id: event_id.clone(),
+                content_category: "DIRECTORY".to_string(),
+                content_hash: digest.full_hash,
+                file_cache_id: Some(format!("fc_{}", event_id)),
+                size_bytes: total_size,
+            });
+        }
         let digest = DigestManifest::from_file(target)?;
         let size = std::fs::metadata(target)?.len();
         return Ok(IpcCopyResponse {
             event_id: event_id.clone(),
-            content_category: if target.is_dir() { "DIRECTORY" } else { "FILE" }.to_string(),
+            content_category: "FILE".to_string(),
             content_hash: digest.full_hash,
             file_cache_id: Some(format!("fc_{}", event_id)),
             size_bytes: size,
@@ -33,3 +46,30 @@ pub fn execute_local_copy(
     }
     anyhow::bail!("Either --text or --path is required")
 }
+
+fn collect_dir_digest_material(
+    dir: &Path,
+    acc: &mut Vec<u8>,
+    total_size: &mut u64,
+) -> anyhow::Result<()> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let p = entry.path();
+        let meta = std::fs::symlink_metadata(&p)?;
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        acc.extend_from_slice(entry.file_name().to_string_lossy().as_bytes());
+        if meta.is_dir() {
+            collect_dir_digest_material(&p, acc, total_size)?;
+        } else if meta.is_file() {
+            let bytes = std::fs::read(&p)?;
+            *total_size += bytes.len() as u64;
+            acc.extend_from_slice(&bytes);
+        }
+    }
+    Ok(())
+}
+
+

@@ -60,3 +60,18 @@ impl Drop for PowerSleepInhibitor {
         self.release();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_power_sleep_inhibitor_lifecycle() {
+        let inhibitor = PowerSleepInhibitor::acquire("Uploading 4GB dataset.zip");
+        assert!(inhibitor.is_active());
+        assert_eq!(inhibitor.reason(), "Uploading 4GB dataset.zip");
+        inhibitor.release();
+        assert!(!inhibitor.is_active());
+    }
+}
+

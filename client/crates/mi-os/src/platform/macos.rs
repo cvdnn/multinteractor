@@ -8,6 +8,7 @@ use super::{FocusedWindowContext, OsPlatformAdapter};
 pub struct MacOsPlatformAdapter {
     pub simulated_focus: Option<FocusedWindowContext>,
     pub simulated_selected_text: Option<String>,
+    pub simulated_image_bytes: Option<Vec<u8>>,
     pub simulated_dialog_dir: Option<PathBuf>,
 }
 
@@ -89,10 +90,35 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
     }
 
     fn read_selected_text_without_clobber(&self) -> anyhow::Result<Option<String>> {
-        if self.simulated_selected_text.is_some() {
+        if self.simulated_selected_text.is_some()
+            || self.simulated_focus.is_some()
+            || self.simulated_image_bytes.is_some()
+            || self.simulated_dialog_dir.is_some()
+        {
             return Ok(self.simulated_selected_text.clone());
         }
         if cfg!(target_os = "macos") {
+            // Query AXSelectedText via Accessibility without overwriting system pasteboard
+            let ax_out = Command::new("osascript")
+                .args([
+                    "-e",
+                    r#"tell application "System Events"
+                        set frontProc to first application process whose frontmost is true
+                        try
+                            set focusedElem to value of attribute "AXFocusedUIElement" of frontProc
+                            return value of attribute "AXSelectedText" of focusedElem
+                        end try
+                    end tell"#,
+                ])
+                .output();
+            if let Ok(out) = ax_out {
+                if out.status.success() {
+                    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !s.is_empty() {
+                        return Ok(Some(s));
+                    }
+                }
+            }
             let output = Command::new("pbpaste").output()?;
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout).to_string();
@@ -100,6 +126,13 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
                     return Ok(Some(text));
                 }
             }
+        }
+        Ok(None)
+    }
+
+    fn read_clipboard_image_bytes(&self) -> anyhow::Result<Option<Vec<u8>>> {
+        if self.simulated_image_bytes.is_some() {
+            return Ok(self.simulated_image_bytes.clone());
         }
         Ok(None)
     }
@@ -123,4 +156,36 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
         }
         Ok(None)
     }
+
+    fn write_text_to_clipboard_and_paste(&self, text: &str) -> anyhow::Result<()> {
+        if self.simulated_focus.is_some()
+            || self.simulated_selected_text.is_some()
+            || self.simulated_image_bytes.is_some()
+            || self.simulated_dialog_dir.is_some()
+        {
+            return Ok(());
+        }
+        if cfg!(target_os = "macos") {
+            use std::io::Write;
+            use std::process::Stdio;
+            let mut child = Command::new("pbcopy")
+                .stdin(Stdio::piped())
+                .spawn()?;
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(text.as_bytes())?;
+            }
+            let status = child.wait()?;
+            if !status.success() {
+                anyhow::bail!("pbcopy failed with status: {}", status);
+            }
+            let _ = Command::new("osascript")
+                .args([
+                    "-e",
+                    r#"tell application "System Events" to keystroke "v" using command down"#,
+                ])
+                .output();
+        }
+        Ok(())
+    }
 }
+

@@ -25,4 +25,13 @@ pub trait OsPlatformAdapter: Send + Sync {
     fn inspect_focused_window(&self) -> anyhow::Result<FocusedWindowContext>;
     fn read_selected_text_without_clobber(&self) -> anyhow::Result<Option<String>>;
     fn prompt_native_save_dialog(&self, default_file_name: &str) -> anyhow::Result<Option<PathBuf>>;
+
+    fn read_clipboard_image_bytes(&self) -> anyhow::Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    fn write_text_to_clipboard_and_paste(&self, _text: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
+

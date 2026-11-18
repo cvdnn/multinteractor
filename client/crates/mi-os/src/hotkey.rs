@@ -37,3 +37,17 @@ impl GlobalHotkeyBinding {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hotkey_chord_resolution() {
+        let binding = GlobalHotkeyBinding::default();
+        assert_eq!(binding.resolve_chord("Alt+C"), Some(HotkeyAction::BroadcastCopy));
+        assert_eq!(binding.resolve_chord("alt+v"), Some(HotkeyAction::SmartPaste));
+        assert_eq!(binding.resolve_chord("Ctrl+C"), None);
+    }
+}
+

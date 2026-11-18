@@ -76,4 +76,117 @@ impl<P: OsPlatformAdapter> SmartPasteRouter<P> {
             }
         }
     }
+
+    pub fn execute_alt_v(&self, latest_event: &CloudEventEnvelope) -> anyhow::Result<SmartPasteDecision> {
+        let decision = self.route_alt_v(latest_event)?;
+        if let SmartPasteDecision::PasteTextIntoEditor { ref text, .. } = decision {
+            self.platform.write_text_to_clipboard_and_paste(text)?;
+        }
+        Ok(decision)
+    }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::macos::MacOsPlatformAdapter;
+    use mi_protocol::digest::DigestManifest;
+    use mi_protocol::envelope::{
+        EventPayload, EventType, ItemMeta, SourceDevice, TargetMode, TargetScope, UploadState,
+        SPEC_VERSION_V6, TOPIC_CLIPBOARD_BROADCAST,
+    };
+
+    fn sample_envelope(category: ContentCategory, text: Option<&str>, item_name: &str) -> CloudEventEnvelope {
+        let bytes = text.unwrap_or("file_bytes").as_bytes();
+        let digest = DigestManifest::from_bytes(bytes);
+        CloudEventEnvelope {
+            spec_version: SPEC_VERSION_V6.to_string(),
+            event_id: "evt_paste_01".to_string(),
+            topic: TOPIC_CLIPBOARD_BROADCAST.to_string(),
+            event_type: EventType::ClipboardBroadcast,
+            timestamp_ms: 1700000000000,
+            source_device: SourceDevice {
+                device_id: "node_a".to_string(),
+                device_name: "Node-A".to_string(),
+                os: "windows".to_string(),
+                lan_endpoint: Some("192.168.1.10:8443".to_string()),
+            },
+            target_scope: TargetScope {
+                mode: TargetMode::Broadcast,
+                target_device_ids: vec!["*".to_string()],
+            },
+            payload: EventPayload {
+                content_category: category.clone(),
+                digest,
+                inline_data: text.map(|s| s.to_string()),
+                file_cache_id: if text.is_none() {
+                    Some("fc_paste_01".to_string())
+                } else {
+                    None
+                },
+                upload_state: UploadState::Completed,
+                items_meta: vec![ItemMeta {
+                    name: item_name.to_string(),
+                    is_dir: category == ContentCategory::Directory,
+                    size_bytes: bytes.len() as u64,
+                    mtime: 1700000000,
+                }],
+                destination_override: None,
+            },
+        }
+    }
+
+    #[test]
+    fn test_smart_paste_routing_all_three_modes() {
+        // 1. Text -> PasteTextIntoEditor
+        let text_env = sample_envelope(ContentCategory::Text, Some("Hello Multinteractor"), "clip.txt");
+        let router_editor = SmartPasteRouter::new(MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::TextEditor {
+                app_name: "Word".to_string(),
+            }),
+            ..Default::default()
+        });
+        assert!(matches!(
+            router_editor.execute_alt_v(&text_env).unwrap(),
+            SmartPasteDecision::PasteTextIntoEditor { .. }
+        ));
+
+        // 2. File in FileManager -> DirectSaveToFolder
+        let file_env = sample_envelope(ContentCategory::File, None, "report.pdf");
+        let router_fm = SmartPasteRouter::new(MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::FileManager {
+                app_name: "Finder".to_string(),
+                current_dir: PathBuf::from("/Users/test/Downloads"),
+                selected_items: vec![],
+            }),
+            ..Default::default()
+        });
+        assert_eq!(
+            router_fm.route_alt_v(&file_env).unwrap(),
+            SmartPasteDecision::DirectSaveToFolder {
+                event_id: "evt_paste_01".to_string(),
+                target_dir: PathBuf::from("/Users/test/Downloads"),
+                item_name: "report.pdf".to_string(),
+            }
+        );
+
+        // 3. Directory in TextEditor -> ShowNativeSaveAsDialog
+        let dir_env = sample_envelope(ContentCategory::Directory, None, "课程资料");
+        let router_dlg = SmartPasteRouter::new(MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::TextEditor {
+                app_name: "VSCode".to_string(),
+            }),
+            simulated_dialog_dir: Some(PathBuf::from("/Users/test/Desktop")),
+            ..Default::default()
+        });
+        assert_eq!(
+            router_dlg.route_alt_v(&dir_env).unwrap(),
+            SmartPasteDecision::ShowNativeSaveAsDialog {
+                event_id: "evt_paste_01".to_string(),
+                default_item_name: "课程资料".to_string(),
+                chosen_dir: Some(PathBuf::from("/Users/test/Desktop")),
+            }
+        );
+    }
+}
+

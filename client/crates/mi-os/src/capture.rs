@@ -33,8 +33,67 @@ impl<P: OsPlatformAdapter> ContextCaptureEngine<P> {
                         return Ok(CapturedSelection::Text(selected_text));
                     }
                 }
-                anyhow::bail!("No active text or file selection detected on Alt+C")
+                if let Some(img_bytes) = self.platform.read_clipboard_image_bytes()? {
+                    if !img_bytes.is_empty() {
+                        return Ok(CapturedSelection::ImageBytes(img_bytes));
+                    }
+                }
+                anyhow::bail!("No active text, image, or file selection detected on Alt+C")
             }
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::macos::MacOsPlatformAdapter;
+
+    #[test]
+    fn test_capture_text_image_and_filesystem_paths() {
+        // 1. FileManager selected items take priority
+        let fm_adapter = MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::FileManager {
+                app_name: "Finder".to_string(),
+                current_dir: PathBuf::from("/Users/test/Desktop"),
+                selected_items: vec![PathBuf::from("/Users/test/Desktop/课程资料")],
+            }),
+            simulated_selected_text: Some("ignored".to_string()),
+            ..Default::default()
+        };
+        let engine = ContextCaptureEngine::new(fm_adapter);
+        assert_eq!(
+            engine.capture_on_alt_c().unwrap(),
+            CapturedSelection::FileSystemPaths(vec![PathBuf::from("/Users/test/Desktop/课程资料")])
+        );
+
+        // 2. TextEditor captures selected text without clobbering clipboard
+        let txt_adapter = MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::TextEditor {
+                app_name: "VSCode".to_string(),
+            }),
+            simulated_selected_text: Some("fn main() {}".to_string()),
+            ..Default::default()
+        };
+        let engine_txt = ContextCaptureEngine::new(txt_adapter);
+        assert_eq!(
+            engine_txt.capture_on_alt_c().unwrap(),
+            CapturedSelection::Text("fn main() {}".to_string())
+        );
+
+        // 3. ImageBytes fallback when no text is selected
+        let img_adapter = MacOsPlatformAdapter {
+            simulated_focus: Some(FocusedWindowContext::OtherWindow {
+                app_name: "Preview".to_string(),
+            }),
+            simulated_image_bytes: Some(vec![0x89, b'P', b'N', b'G']),
+            ..Default::default()
+        };
+        let engine_img = ContextCaptureEngine::new(img_adapter);
+        assert_eq!(
+            engine_img.capture_on_alt_c().unwrap(),
+            CapturedSelection::ImageBytes(vec![0x89, b'P', b'N', b'G'])
+        );
+    }
+}
+

@@ -93,4 +93,50 @@ impl ContextMenuRegistry {
 </plist>"#
             .to_string()
     }
+
+    /// 将右键菜单扩展配置文件导出至指定目录 (`.reg` + macOS `Info.plist`).
+    pub fn write_install_files(&self, out_dir: &std::path::Path) -> anyhow::Result<(std::path::PathBuf, std::path::PathBuf)> {
+        std::fs::create_dir_all(out_dir)?;
+        let reg_path = out_dir.join("multinteractor_context_menu.reg");
+        let plist_path = out_dir.join("Info.plist");
+        std::fs::write(&reg_path, self.render_windows_reg_script())?;
+        std::fs::write(&plist_path, self.render_macos_quick_action_plist())?;
+        Ok((reg_path, plist_path))
+    }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_context_menu_refresh_and_script_generation() {
+        let mut reg = ContextMenuRegistry::new();
+        let devices = vec![
+            DeviceStatusDto {
+                device_id: "node_a".to_string(),
+                name: "Node-A".to_string(),
+                os: "windows".to_string(),
+                online: true,
+                lan_endpoint: Some("192.168.1.10:8443".to_string()),
+                lan_reachable: true,
+                cert_sha256: None,
+            },
+            DeviceStatusDto {
+                device_id: "node_c".to_string(),
+                name: "Office-Mac".to_string(),
+                os: "macos".to_string(),
+                online: true,
+                lan_endpoint: Some("192.168.1.12:8443".to_string()),
+                lan_reachable: true,
+                cert_sha256: None,
+            },
+        ];
+        reg.refresh_online_devices(&devices, "node_a");
+        assert_eq!(reg.menu_items().len(), 1);
+        assert_eq!(reg.menu_items()[0].device_id, "node_c");
+        assert!(reg.render_windows_reg_script().contains("Office-Mac (macos)"));
+        assert!(reg.render_macos_quick_action_plist().contains("同步到... (multinteractor)"));
+    }
+}
+
