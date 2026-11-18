@@ -1,7 +1,9 @@
 //! 轻量级远程目录树选择弹窗与传输进度框宿主入口 (`mi-ui`) (FR-CTX-01~03, TASK-09).
 
 pub mod commands;
+pub mod gui;
 
+use std::path::PathBuf;
 use clap::Parser;
 use commands::RemoteDirectoryPickerSession;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,8 +14,12 @@ const EMBEDDED_PICKER_JS: &str = include_str!("../ui/directory_picker.js");
 const EMBEDDED_TOAST_JS: &str = include_str!("../ui/transfer_toast.js");
 
 #[derive(Debug, Parser)]
-#[command(name = "mi-ui", version, about = "multinteractor remote directory picker & progress UI")]
+#[command(name = "mi-ui", version, about = "multinteractor desktop GUI, tray & remote directory picker")]
 struct UiArgs {
+    /// Optional JSON config file path for the embedded daemon
+    #[arg(long)]
+    config: Option<PathBuf>,
+
     /// Open remote directory picker modal (`--pick-remote-dir`)
     #[arg(long, default_value_t = false)]
     pick_remote_dir: bool,
@@ -131,29 +137,32 @@ async fn serve_picker_ui(
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let args = UiArgs::parse();
-    let session = RemoteDirectoryPickerSession::new(args.device.clone(), args.source.clone());
 
     if let Some(ref target_dir) = args.remote_dir {
+        let session = RemoteDirectoryPickerSession::new(args.device.clone(), args.source.clone());
         let resp = session.execute_sync(target_dir.clone())?;
         println!("{}", serde_json::to_string_pretty(&resp)?);
         return Ok(());
     }
 
     if let Some(bind_addr) = args.serve {
-        return serve_picker_ui(&bind_addr, session, false).await;
+        let session = RemoteDirectoryPickerSession::new(args.device.clone(), args.source.clone());
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        return rt.block_on(serve_picker_ui(&bind_addr, session, false));
     }
 
     if args.pick_remote_dir {
-        return serve_picker_ui("127.0.0.1:0", session, true).await;
+        let session = RemoteDirectoryPickerSession::new(args.device.clone(), args.source.clone());
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        return rt.block_on(serve_picker_ui("127.0.0.1:0", session, true));
     }
 
-    println!(
-        "multinteractor remote directory picker ready: target={}, initial_path={}",
-        session.target_device_id, session.current_remote_path
-    );
-    Ok(())
+    gui::run_native_gui(args.config, args.device, args.source)
 }
 
