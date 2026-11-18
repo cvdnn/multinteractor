@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 //! 轻量级远程目录树选择弹窗与传输进度框宿主入口 (`mi-ui`) (FR-CTX-01~03, TASK-09).
 
 pub mod commands;
@@ -14,7 +15,11 @@ const EMBEDDED_PICKER_JS: &str = include_str!("../ui/directory_picker.js");
 const EMBEDDED_TOAST_JS: &str = include_str!("../ui/transfer_toast.js");
 
 #[derive(Debug, Parser)]
-#[command(name = "mi-ui", version, about = "multinteractor desktop GUI, tray & remote directory picker")]
+#[command(
+    name = "mi-ui",
+    version = option_env!("MI_APP_VERSION").unwrap_or("v1"),
+    about = "multinteractor desktop GUI, tray & remote directory picker"
+)]
 struct UiArgs {
     /// Optional JSON config file path for the embedded daemon
     #[arg(long)]

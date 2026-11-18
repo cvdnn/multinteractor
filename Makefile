@@ -4,7 +4,7 @@ PYTHON ?= $(if $(wildcard $(CURDIR)/.venv/bin/python),$(CURDIR)/.venv/bin/python
 NPM ?= $(shell command -v npm 2>/dev/null || echo npm)
 CARGO ?= $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
 
-.PHONY: help server-dev server-test webui-install webui-typecheck webui-build client-check client-build client-test test-all task-status clean
+.PHONY: help server-dev server-test webui-install webui-typecheck webui-build client-check client-build client-test package-macos-app test-all task-status clean
 
 help:
 	@echo "Available targets:"
@@ -16,6 +16,7 @@ help:
 	@echo "  client-check     检查客户端 Cargo Workspace 编译"
 	@echo "  client-build     编译客户端守护进程与 mi CLI 工具"
 	@echo "  client-test      运行客户端单元测试"
+	@echo "  package-macos-app 打包生成 macOS Multinteractor.app 桌面应用"
 	@echo "  test-all         运行 L1~L4 全量单元、集成、混沌与端到端验收测试"
 	@echo "  task-status      查看任务原子锁状态 (.task_lock.json)"
 	@echo "  clean            清理构建产物与临时缓存文件"
@@ -43,6 +44,22 @@ client-build:
 
 client-test:
 	cd client && $(CARGO) test --workspace
+
+version:
+	@cat VERSION
+
+bump-version:
+	@cur=$$(tr -d '[:space:]' < VERSION); \
+	num=$${cur#v}; \
+	next="v$$((num + 1))"; \
+	echo "$$next" > VERSION; \
+	echo "Updated VERSION: $$cur -> $$next"
+
+package-macos-app:
+	bash deploy/client/macos/package_macos_app.sh
+
+package-macos-app-bump:
+	bash deploy/client/macos/package_macos_app.sh --bump
 
 test-all:
 	$(PYTHON) -m unittest \
