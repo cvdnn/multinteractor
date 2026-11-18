@@ -203,4 +203,38 @@ def build_devices_router(
             on_cluster_rotate(res["token"])
         return res
 
+    @router.post("/api/v1/devices/{device_id}/pair/approve")
+    async def api_approve_device_pairing(
+        device_id: str,
+        payload: Optional[Dict[str, Any]] = Body(default=None),
+        _admin: Any = Depends(require_admin),
+    ) -> Dict[str, Any]:
+        body = payload or {}
+        sas_code = body.get("sas_code")
+        ok = handler.sub_manager.approve_device_pairing(device_id, sas_code=sas_code)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Device pairing record not found or SAS mismatch")
+        return {"status": "ACTIVE", "device_id": device_id}
+
+    @router.post("/api/v1/security/certs/revoke")
+    async def api_revoke_cert(
+        payload: Dict[str, Any] = Body(...),
+        _admin: Any = Depends(require_admin),
+    ) -> Dict[str, Any]:
+        try:
+            return await handler.sub_manager.revoke_cert_and_broadcast(
+                cert_sha256=payload.get("cert_sha256"),
+                device_id=payload.get("device_id"),
+                reason=str(payload.get("reason", "ADMIN_REVOKED")),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @router.get("/api/v1/security/certs/revoked")
+    async def api_list_revoked_certs(
+        _admin: Any = Depends(require_admin),
+    ) -> Dict[str, Any]:
+        fps = handler.sub_manager.list_revoked_certs()
+        return {"revoked_cert_fingerprints": fps, "total": len(fps)}
+
     return router

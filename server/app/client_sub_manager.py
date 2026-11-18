@@ -107,6 +107,7 @@ class ClientSubscriptionManager:
         state_db_path: Optional[Path] = None,
     ) -> None:
         self._state = HubStateStore(state_db_path)
+        self._state_store = self._state
         self._shared_auth_token = self._state.resolve_cluster_token(shared_auth_token)
         self._devices: Dict[str, RegisteredDevice] = {}
         self._audit = audit_logger
@@ -317,6 +318,8 @@ class ClientSubscriptionManager:
         lan_endpoint: Optional[str],
         auth_token: str,
         extra_topics: Optional[List[str]] = None,
+        cert_sha256: Optional[str] = None,
+        cert_expires_at: Optional[int] = None,
     ) -> RegisteredDevice:
         if not self.verify_token(auth_token):
             self._audit.log_connection(
@@ -328,6 +331,24 @@ class ClientSubscriptionManager:
                 detail="Invalid or revoked auth token",
             )
             raise PermissionDeniedError("403 Forbidden: Invalid or revoked auth token")
+
+        if cert_sha256 and self._state_store and self._state_store.is_cert_revoked(cert_sha256):
+            self._audit.log_connection(
+                device_id=device_id,
+                device_name=device_name,
+                action="REGISTER",
+                lan_endpoint=lan_endpoint,
+                status="CERT_REVOKED",
+                detail=f"Certificate fingerprint revoked: {cert_sha256}",
+            )
+            raise PermissionDeniedError("403 Forbidden: Device certificate has been revoked")
+
+        if cert_sha256 and self._state_store:
+            self._state_store.upsert_device_cert(
+                device_id=device_id,
+                cert_sha256=cert_sha256,
+                cert_expires_at=cert_expires_at,
+            )
 
         existing = self._devices.get(device_id)
         if existing and not existing.enabled:
@@ -468,6 +489,48 @@ class ClientSubscriptionManager:
         )
         self._emit("device_kicked", dev.to_public_dict())
         return True
+
+    def approve_device_pairing(self, device_id: str, sas_code: Optional[str] = None) -> bool:
+        if self._state_store is None:
+            return False
+        return self._state_store.approve_device_pairing(device_id, sas_code=sas_code)
+
+    async def revoke_cert_and_broadcast(
+        self,
+        cert_sha256: Optional[str] = None,
+        device_id: Optional[str] = None,
+        reason: str = "ADMIN_REVOKED",
+    ) -> Dict[str, Any]:
+        target_fp = cert_sha256
+        if not target_fp and device_id and self._state_store:
+            rec = self._state_store.get_device_cert(device_id)
+            if rec:
+                target_fp = str(rec["cert_sha256"])
+        if not target_fp:
+            raise KeyError("Certificate fingerprint not found")
+        if self._state_store:
+            self._state_store.revoke_cert_fingerprint(target_fp, reason=reason)
+        if device_id and device_id in self._devices and self._devices[device_id].online:
+            await self.kick_device(device_id)
+        revoked_list = self.list_revoked_certs()
+        payload = json.dumps(
+            {
+                "type": "CERT_REVOKE",
+                "revoked_cert_fingerprints": revoked_list,
+            }
+        )
+        for dev in list(self._devices.values()):
+            if dev.online and dev.send_callback is not None:
+                try:
+                    await dev.send_callback(payload)
+                except Exception:
+                    pass
+        return {"status": "REVOKED", "cert_sha256": target_fp, "revoked_count": len(revoked_list)}
+
+    def list_revoked_certs(self) -> List[str]:
+        if self._state_store is None:
+            return []
+        return self._state_store.list_revoked_cert_fingerprints()
 
     async def remove_device(self, device_id: str) -> bool:
         """彻底注销并从台账中删除设备."""

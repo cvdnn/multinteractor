@@ -321,6 +321,8 @@ def create_fastapi_app(
                 lan_endpoint=lan_endpoint,
                 auth_token=auth_token,
                 extra_topics=extra_topics or None,
+                cert_sha256=hello.get("cert_sha256"),
+                cert_expires_at=hello.get("cert_expires_at"),
             )
             hub.sub_manager.bind_session_closer(device_id, _force_close)
             await websocket.send_json(
@@ -328,6 +330,7 @@ def create_fastapi_app(
                     "type": "REGISTERED",
                     "device_id": dev.device_id,
                     "peers": hub.sub_manager.list_devices(),
+                    "revoked_cert_fingerprints": hub.sub_manager.list_revoked_certs(),
                 }
             )
 

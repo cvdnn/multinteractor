@@ -110,6 +110,27 @@ class HubStateStore:
                 );
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS device_certificates (
+                    device_id TEXT PRIMARY KEY,
+                    cert_sha256 TEXT NOT NULL,
+                    cert_expires_at INTEGER,
+                    pairing_status TEXT NOT NULL DEFAULT 'PENDING_PAIR',
+                    sas_code TEXT,
+                    updated_at_ms INTEGER NOT NULL
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS revoked_cert_fingerprints (
+                    cert_sha256 TEXT PRIMARY KEY,
+                    reason TEXT NOT NULL DEFAULT 'ADMIN_REVOKED',
+                    revoked_at_ms INTEGER NOT NULL
+                );
+                """
+            )
             self._conn.commit()
 
     def _get_config(self, key: str) -> Optional[str]:
@@ -344,6 +365,94 @@ class HubStateStore:
             revoked=bool(row["revoked"]),
             revoked_at_ms=int(row["revoked_at_ms"]) if row["revoked_at_ms"] is not None else None,
         )
+
+    def upsert_device_cert(
+        self,
+        device_id: str,
+        cert_sha256: str,
+        cert_expires_at: Optional[int] = None,
+        pairing_status: str = "PENDING_PAIR",
+        sas_code: Optional[str] = None,
+    ) -> None:
+        norm = cert_sha256.strip().replace(":", "").lower()
+        now = _now_ms()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO device_certificates (
+                    device_id, cert_sha256, cert_expires_at, pairing_status, sas_code, updated_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    cert_sha256 = excluded.cert_sha256,
+                    cert_expires_at = excluded.cert_expires_at,
+                    pairing_status = excluded.pairing_status,
+                    sas_code = COALESCE(excluded.sas_code, device_certificates.sas_code),
+                    updated_at_ms = excluded.updated_at_ms
+                """,
+                (device_id, norm, cert_expires_at, pairing_status, sas_code, now),
+            )
+            self._conn.commit()
+
+    def get_device_cert(self, device_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM device_certificates WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def approve_device_pairing(self, device_id: str, sas_code: Optional[str] = None) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT sas_code FROM device_certificates WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            if sas_code and row["sas_code"] and str(row["sas_code"]) != sas_code.strip():
+                return False
+            self._conn.execute(
+                "UPDATE device_certificates SET pairing_status = 'ACTIVE', updated_at_ms = ? WHERE device_id = ?",
+                (_now_ms(), device_id),
+            )
+            self._conn.commit()
+            return True
+
+    def revoke_cert_fingerprint(self, cert_sha256: str, reason: str = "ADMIN_REVOKED") -> None:
+        norm = cert_sha256.strip().replace(":", "").lower()
+        now = _now_ms()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO revoked_cert_fingerprints (cert_sha256, reason, revoked_at_ms)
+                VALUES (?, ?, ?)
+                ON CONFLICT(cert_sha256) DO UPDATE SET
+                    reason = excluded.reason,
+                    revoked_at_ms = excluded.revoked_at_ms
+                """,
+                (norm, reason, now),
+            )
+            self._conn.execute(
+                "UPDATE device_certificates SET pairing_status = 'REVOKED', updated_at_ms = ? WHERE cert_sha256 = ?",
+                (now, norm),
+            )
+            self._conn.commit()
+
+    def is_cert_revoked(self, cert_sha256: str) -> bool:
+        norm = cert_sha256.strip().replace(":", "").lower()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM revoked_cert_fingerprints WHERE cert_sha256 = ?",
+                (norm,),
+            ).fetchone()
+            return row is not None
+
+    def list_revoked_cert_fingerprints(self) -> List[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT cert_sha256 FROM revoked_cert_fingerprints ORDER BY revoked_at_ms DESC"
+            ).fetchall()
+            return [str(r["cert_sha256"]) for r in rows]
 
     def close(self) -> None:
         with self._lock:
