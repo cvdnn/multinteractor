@@ -14,6 +14,40 @@ pub struct DeviceStatusDto {
     pub online: bool,
     pub lan_endpoint: Option<String>,
     pub lan_reachable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cert_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcCertStatusResponse {
+    pub device_id: String,
+    pub local_cert_sha256: String,
+    pub local_cert_expires_at: u64,
+    pub pinned_server_cert_sha256: Option<String>,
+    pub backup_server_cert_sha256: Option<String>,
+    pub revoked_fingerprints_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcCertRotateResponse {
+    pub old_cert_sha256: String,
+    pub new_cert_sha256: String,
+    pub expires_at: u64,
+    pub lan_sessions_cleared: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcPairStatusResponse {
+    pub device_id: String,
+    pub client_cert_sha256: String,
+    pub server_cert_sha256: Option<String>,
+    pub sas_code: Option<String>,
+    pub paired: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcPinServerRequest {
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,11 +83,23 @@ pub struct IpcPasteResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcRemoteLsRequest {
+    pub device: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpcRemoteLsResponse {
     pub device_id: String,
     pub path: String,
     pub entries: Vec<FsEntry>,
     pub free_space_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcRemoteMkdirRequest {
+    pub device: String,
+    pub path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,6 +122,11 @@ pub struct IpcSyncResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcTransferActionRequest {
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpcTransferStatusResponse {
     pub task_id: String,
     pub file_cache_id: String,
@@ -90,4 +141,15 @@ pub struct IpcTransferStatusResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpcEventsListResponse {
     pub events: Vec<CloudEventEnvelope>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IpcHealthResponse {
+    pub status: String,
+    pub device_id: String,
+    pub device_name: String,
+    pub local_ipc_addr: String,
+    pub lan_bind_addr: String,
+    pub active_lan_connections: usize,
+    pub cached_events: usize,
 }
