@@ -1,12 +1,20 @@
 //! 原生桌面 GUI 主控台、系统状态栏（Menu Bar / System Tray）常驻与守护服务生命周期托管.
 
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use eframe::egui;
 use mi_daemon::config::DaemonConfig;
 use mi_daemon::{DaemonNode, RunningDaemonHandles};
+use mi_os::capture::{CapturedSelection, ContextCaptureEngine};
+use mi_os::hotkey::{
+    start_global_hotkey_listener, GlobalHotkeyBinding, GlobalHotkeyHandle, HotkeyAction,
+};
+use mi_os::platform::OsPlatformAdapter;
+use mi_os::power::PowerSleepInhibitor;
+use mi_os::smart_paste::{SmartPasteDecision, SmartPasteRouter};
 use mi_protocol::envelope::CloudEventEnvelope;
 use mi_protocol::ipc::{
     DeviceStatusDto, IpcCopyRequest, IpcPasteRequest, IpcRemoteLsRequest, IpcRemoteMkdirRequest,
@@ -15,6 +23,20 @@ use mi_protocol::ipc::{
 use mi_protocol::rpc::{FsEntry, ROOT_PATH_SENTINEL};
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
+
+#[cfg(target_os = "windows")]
+use mi_os::platform::windows::WindowsPlatformAdapter as ActivePlatformAdapter;
+#[cfg(target_os = "macos")]
+use mi_os::platform::macos::MacOsPlatformAdapter as ActivePlatformAdapter;
+#[cfg(all(unix, not(target_os = "macos")))]
+use mi_os::platform::linux::LinuxPlatformAdapter as ActivePlatformAdapter;
+
+pub fn app_version() -> &'static str {
+    match option_env!("MI_APP_VERSION") {
+        Some(v) => v,
+        None => include_str!("../../../../VERSION").trim(),
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ActiveTab {
@@ -111,6 +133,29 @@ impl DaemonController {
         ))
     }
 
+    fn copy_path(&self, path: &str) -> anyhow::Result<String> {
+        let node = self
+            .node
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("守护服务未运行"))?;
+        let now_ms = now_unix_ms();
+        let event_id = format!("evt_{}_{}", self.config.device_id, now_ms);
+        let resp = node.ipc.handle_copy(
+            IpcCopyRequest {
+                text: None,
+                path: Some(path.to_string()),
+            },
+            event_id,
+            now_ms,
+        )?;
+        Ok(format!(
+            "已广播 [{}] ({} bytes, BLAKE3: {}...)",
+            resp.content_category,
+            resp.size_bytes,
+            &resp.content_hash.chars().take(12).collect::<String>()
+        ))
+    }
+
     fn paste_latest(&self, event_id: Option<String>) -> anyhow::Result<String> {
         let node = self
             .node
@@ -123,6 +168,22 @@ impl DaemonController {
         if let Some(text) = resp.inline_text {
             Ok(format!("粘贴校验通过 (BLAKE3): {}", text))
         } else if let Some(saved) = resp.saved_path {
+            Ok(format!("已校验并落盘至: {}", saved))
+        } else {
+            Ok("粘贴完成".to_string())
+        }
+    }
+
+    fn paste_to_dir(&self, event_id: Option<String>, dest_dir: &str) -> anyhow::Result<String> {
+        let node = self
+            .node
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("守护服务未运行"))?;
+        let resp = node.ipc.handle_paste(IpcPasteRequest {
+            event_id,
+            dest_dir: Some(dest_dir.to_string()),
+        })?;
+        if let Some(saved) = resp.saved_path {
             Ok(format!("已校验并落盘至: {}", saved))
         } else {
             Ok("粘贴完成".to_string())
@@ -257,6 +318,11 @@ impl TrayHolder {
 struct MultinteractorApp {
     daemon: Arc<Mutex<DaemonController>>,
     tray: Option<TrayHolder>,
+    _hotkey_handle: Option<GlobalHotkeyHandle>,
+    hotkey_rx: Option<Receiver<HotkeyAction>>,
+    hotkey_status_label: String,
+    hotkey_feedback_tx: Sender<String>,
+    hotkey_feedback_rx: Receiver<String>,
     should_quit: bool,
     window_visible: bool,
     active_tab: ActiveTab,
@@ -278,12 +344,35 @@ impl MultinteractorApp {
     fn new(
         daemon: Arc<Mutex<DaemonController>>,
         tray: Option<TrayHolder>,
+        hotkey: Option<(GlobalHotkeyHandle, Receiver<HotkeyAction>)>,
+        hotkey_err: Option<String>,
         default_device: String,
         default_source: String,
     ) -> Self {
+        let (hotkey_handle, hotkey_rx, hotkey_status_label) = match hotkey {
+            Some((h, rx)) => {
+                let label = if h.status.active {
+                    "Alt+C / Alt+V 已就绪".to_string()
+                } else {
+                    format!("降级 ({})", h.status.backend)
+                };
+                (Some(h), Some(rx), label)
+            }
+            None => (
+                None,
+                None,
+                format!("未启用 ({})", hotkey_err.unwrap_or_else(|| "未知原因".to_string())),
+            ),
+        };
+        let (hotkey_feedback_tx, hotkey_feedback_rx) = mpsc::channel();
         Self {
             daemon,
             tray,
+            _hotkey_handle: hotkey_handle,
+            hotkey_rx,
+            hotkey_status_label,
+            hotkey_feedback_tx,
+            hotkey_feedback_rx,
             should_quit: false,
             window_visible: true,
             active_tab: ActiveTab::Clipboard,
@@ -361,14 +450,108 @@ impl MultinteractorApp {
             }
         }
     }
+
+    fn poll_hotkey_events(&mut self) {
+        while let Ok(msg) = self.hotkey_feedback_rx.try_recv() {
+            self.status_banner = Some(msg);
+        }
+
+        let mut actions = Vec::new();
+        if let Some(ref rx) = self.hotkey_rx {
+            while let Ok(act) = rx.try_recv() {
+                actions.push(act);
+            }
+        }
+
+        for act in actions {
+            let daemon = self.daemon.clone();
+            let feedback = self.hotkey_feedback_tx.clone();
+            std::thread::spawn(move || {
+                let platform = ActivePlatformAdapter::default();
+                let res = match act {
+                    HotkeyAction::BroadcastCopy => {
+                        let engine = ContextCaptureEngine::new(platform);
+                        engine.capture_on_alt_c().and_then(|sel| match sel {
+                            CapturedSelection::Text(t) => daemon.lock().unwrap().copy_text(&t),
+                            CapturedSelection::FileSystemPaths(paths) => {
+                                let first = paths
+                                    .first()
+                                    .ok_or_else(|| anyhow::anyhow!("未选中有效文件或目录"))?;
+                                daemon
+                                    .lock()
+                                    .unwrap()
+                                    .copy_path(&first.to_string_lossy())
+                            }
+                            CapturedSelection::ImageBytes(bytes) => {
+                                let tmp = std::env::temp_dir().join("mi_clipboard_image.png");
+                                std::fs::write(&tmp, &bytes)?;
+                                daemon.lock().unwrap().copy_path(&tmp.to_string_lossy())
+                            }
+                        })
+                    }
+                    HotkeyAction::SmartPaste => {
+                        let latest = daemon.lock().unwrap().events(1).into_iter().next();
+                        match latest {
+                            None => Err(anyhow::anyhow!("本地接收事件缓存为空")),
+                            Some(ev) => {
+                                let router = SmartPasteRouter::new(platform.clone());
+                                router.route_alt_v(&ev).and_then(|decision| match decision {
+                                    SmartPasteDecision::PasteTextIntoEditor { text, .. } => {
+                                        platform.write_text_to_clipboard_and_paste(&text)?;
+                                        Ok(format!("Alt+V 已校验并粘贴文本 ({})", ev.event_id))
+                                    }
+                                    SmartPasteDecision::DirectSaveToFolder { target_dir, .. } => {
+                                        let _inhibitor = PowerSleepInhibitor::acquire(format!(
+                                            "paste_{}",
+                                            ev.event_id
+                                        ));
+                                        daemon.lock().unwrap().paste_to_dir(
+                                            Some(ev.event_id),
+                                            &target_dir.to_string_lossy(),
+                                        )
+                                    }
+                                    SmartPasteDecision::ShowNativeSaveAsDialog {
+                                        chosen_dir: Some(target_dir),
+                                        ..
+                                    } => {
+                                        let _inhibitor = PowerSleepInhibitor::acquire(format!(
+                                            "paste_{}",
+                                            ev.event_id
+                                        ));
+                                        daemon.lock().unwrap().paste_to_dir(
+                                            Some(ev.event_id),
+                                            &target_dir.to_string_lossy(),
+                                        )
+                                    }
+                                    SmartPasteDecision::ShowNativeSaveAsDialog {
+                                        chosen_dir: None,
+                                        ..
+                                    } => Ok("已取消 Alt+V 另存为操作".to_string()),
+                                })
+                            }
+                        }
+                    }
+                };
+                match res {
+                    Ok(msg) => {
+                        let _ = feedback.send(msg);
+                    }
+                    Err(err) => {
+                        let _ = feedback.send(format!("全局热键执行失败: {}", err));
+                    }
+                }
+            });
+        }
+    }
 }
 
 impl eframe::App for MultinteractorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // 保持后台轮询托盘事件与状态刷新
-        ctx.request_repaint_after(Duration::from_millis(400));
+        // 保持后台轮询托盘事件、全局热键与状态刷新
+        ctx.request_repaint_after(Duration::from_millis(200));
 
         self.poll_tray_events(ctx);
+        self.poll_hotkey_events();
 
         // 拦截关闭按钮 -> 最小化并常驻状态栏
         if ctx.input(|i| i.viewport().close_requested()) && !self.should_quit {
@@ -423,7 +606,8 @@ impl eframe::App for MultinteractorApp {
                             .strong()
                             .color(theme::TEXT_PRIMARY),
                     );
-                    ui.add_space(8.0);
+                    badge(ui, app_version(), theme::PRIMARY, theme::PRIMARY_SOFT);
+                    ui.add_space(4.0);
                     if running {
                         badge(ui, "● 守护服务运行中", theme::SUCCESS, theme::SUCCESS_SOFT);
                     } else {
@@ -450,6 +634,7 @@ impl eframe::App for MultinteractorApp {
                     info_chip(ui, "本机节点", &format!("{} ({})", device_name, device_id));
                     info_chip(ui, "IPC", &ipc_addr);
                     info_chip(ui, "LAN mTLS", &lan_addr);
+                    info_chip(ui, "全局热键", &self.hotkey_status_label);
                 });
             });
 
@@ -1045,7 +1230,7 @@ pub fn run_native_gui(
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1000.0, 660.0])
             .with_min_inner_size([760.0, 500.0])
-            .with_title("multinteractor 跨机协同中枢"),
+            .with_title(format!("multinteractor 跨机协同中枢 {}", app_version())),
         ..Default::default()
     };
 
@@ -1056,9 +1241,15 @@ pub fn run_native_gui(
         Box::new(move |cc| {
             configure_light_theme_and_fonts(&cc.egui_ctx);
             let tray = TrayHolder::new(&device_id).ok();
+            let (hotkey, hotkey_err) = match start_global_hotkey_listener(&GlobalHotkeyBinding::default()) {
+                Ok(pair) => (Some(pair), None),
+                Err(err) => (None, Some(err.to_string())),
+            };
             Ok(Box::new(MultinteractorApp::new(
                 daemon_for_app,
                 tray,
+                hotkey,
+                hotkey_err,
                 default_device,
                 default_source,
             )))

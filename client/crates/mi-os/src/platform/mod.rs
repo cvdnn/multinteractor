@@ -1,5 +1,6 @@
 //! 操作系统平台特定 API 抽象与条件编译适配层 (`windows` / `macos`).
 
+pub mod linux;
 pub mod macos;
 pub mod windows;
 

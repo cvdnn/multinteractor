@@ -43,6 +43,24 @@ if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 }
 "#;
 
+    pub const UIA_SELECTED_TEXT_PS_SCRIPT: &'static str = r#"
+Add-Type -AssemblyName UIAutomationClient
+$elem = [System.Windows.Automation.AutomationElement]::FocusedElement
+if ($null -ne $elem) {
+    $patObj = $null
+    if ($elem.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$patObj)) {
+        $sel = $patObj.GetSelection()
+        if ($sel.Length -gt 0) {
+            $txt = $sel[0].GetText(-1)
+            if (-not [string]::IsNullOrEmpty($txt)) {
+                Write-Output $txt
+                exit 0
+            }
+        }
+    }
+}
+"#;
+
     /// 通过 Windows Shell.Application COM 接口探测当前活动 Explorer 窗口路径与选中文件列表.
     fn query_explorer_context_via_com() -> anyhow::Result<Option<FocusedWindowContext>> {
         let output = Command::new("powershell")
@@ -102,6 +120,22 @@ impl OsPlatformAdapter for WindowsPlatformAdapter {
             return Ok(self.simulated_selected_text.clone());
         }
         if cfg!(target_os = "windows") {
+            // 1. 优先通过 UIAutomation TextPattern 无损获取当前焦点控件选中文本
+            if let Ok(uia_out) = Command::new("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", Self::UIA_SELECTED_TEXT_PS_SCRIPT])
+                .output()
+            {
+                if uia_out.status.success() {
+                    let sel = String::from_utf8_lossy(&uia_out.stdout)
+                        .trim_end_matches(&['\r', '\n'][..])
+                        .to_string();
+                    if !sel.is_empty() {
+                        return Ok(Some(sel));
+                    }
+                }
+            }
+
+            // 2. 回退读取系统剪贴板
             let output = Command::new("powershell")
                 .args(["-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"])
                 .output()?;
