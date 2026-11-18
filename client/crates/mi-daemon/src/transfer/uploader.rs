@@ -79,3 +79,24 @@ impl UploadSession {
         Ok((buf, chunk_hash))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_upload_session_detects_source_file_modification_risk_01() {
+        let tmp = std::env::temp_dir().join(format!("mi_upload_test_{}.bin", std::process::id()));
+        fs::write(&tmp, b"initial content 12345").unwrap();
+        let session = UploadSession::from_file("fc_test_01".to_string(), &tmp).unwrap();
+        let (chunk, hash) = session.read_chunk_at(&tmp, 0).unwrap();
+        assert_eq!(chunk, b"initial content 12345");
+        assert_eq!(hash, session.digest.full_hash);
+
+        // Mutate file size -> must trigger SourceFileModified
+        fs::write(&tmp, b"modified content with different length").unwrap();
+        let err = session.read_chunk_at(&tmp, 0).unwrap_err();
+        assert!(matches!(err, UploadError::SourceFileModified { .. }));
+        let _ = fs::remove_file(&tmp);
+    }
+}

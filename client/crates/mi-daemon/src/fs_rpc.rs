@@ -51,9 +51,36 @@ pub fn validate_rpc_path(path_str: &str) -> anyhow::Result<PathBuf> {
     Ok(p.to_path_buf())
 }
 
+#[derive(Debug, Clone)]
 pub struct FsRpcHandler {
     pub device_id: String,
     pub scan_timeout: Duration,
+    pub allowed_roots: Vec<PathBuf>,
+}
+
+#[cfg(unix)]
+fn query_free_space_bytes(path: &Path) -> u64 {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let check_path = if path.exists() {
+        path
+    } else {
+        path.parent().unwrap_or_else(|| Path::new("/"))
+    };
+    if let Ok(c_path) = CString::new(check_path.as_os_str().as_bytes()) {
+        unsafe {
+            let mut stat: libc::statvfs = std::mem::zeroed();
+            if libc::statvfs(c_path.as_ptr(), &mut stat) == 0 {
+                return (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
+            }
+        }
+    }
+    64 * 1024 * 1024 * 1024
+}
+
+#[cfg(not(unix))]
+fn query_free_space_bytes(_path: &Path) -> u64 {
+    64 * 1024 * 1024 * 1024
 }
 
 impl FsRpcHandler {
@@ -61,21 +88,52 @@ impl FsRpcHandler {
         Self {
             device_id,
             scan_timeout: DEFAULT_DIR_SCAN_TIMEOUT,
+            allowed_roots: Vec::new(),
         }
+    }
+
+    pub fn with_allowed_roots(device_id: String, allowed_roots: Vec<PathBuf>) -> Self {
+        Self {
+            device_id,
+            scan_timeout: DEFAULT_DIR_SCAN_TIMEOUT,
+            allowed_roots,
+        }
+    }
+
+    fn verify_within_allowed_roots(&self, target: &Path) -> anyhow::Result<()> {
+        if self.allowed_roots.is_empty() {
+            return Ok(());
+        }
+        for root in &self.allowed_roots {
+            if target.starts_with(root) {
+                return Ok(());
+            }
+        }
+        anyhow::bail!(
+            "SECURITY_REJECTED: Path '{}' is outside allowed_roots whitelist",
+            target.display()
+        )
     }
 
     pub fn handle_list_dir(&self, req: &FsListDirRequest) -> anyhow::Result<FsListDirResponse> {
         let t0 = Instant::now();
         let mut entries = Vec::new();
         let mut skipped_offline = Vec::new();
+        let mut probe_path = PathBuf::from("/");
 
         if req.path == ROOT_PATH_SENTINEL {
-            for candidate in Self::root_and_shortcut_paths() {
+            let candidates = if self.allowed_roots.is_empty() {
+                Self::root_and_shortcut_paths()
+            } else {
+                self.allowed_roots.clone()
+            };
+            for candidate in candidates {
                 if t0.elapsed() > self.scan_timeout {
                     skipped_offline.push(candidate.to_string_lossy().to_string());
                     continue;
                 }
                 if candidate.exists() {
+                    probe_path = candidate.clone();
                     let name = candidate
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
@@ -92,6 +150,8 @@ impl FsRpcHandler {
             }
         } else {
             let dir_path = validate_rpc_path(&req.path)?;
+            self.verify_within_allowed_roots(&dir_path)?;
+            probe_path = dir_path.clone();
             for item in fs::read_dir(&dir_path)? {
                 if t0.elapsed() > self.scan_timeout {
                     skipped_offline.push(req.path.clone());
@@ -120,12 +180,14 @@ impl FsRpcHandler {
             entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
         }
 
+        let free_space_bytes = query_free_space_bytes(&probe_path);
+
         Ok(FsListDirResponse {
             request_id: req.request_id.clone(),
             device_id: self.device_id.clone(),
             current_path: req.path.clone(),
             entries,
-            free_space_bytes: 64 * 1024 * 1024 * 1024,
+            free_space_bytes,
             scan_duration_ms: t0.elapsed().as_millis() as u64,
             skipped_offline_drives: skipped_offline,
         })
@@ -143,6 +205,15 @@ impl FsRpcHandler {
                 };
             }
         };
+
+        if let Err(err) = self.verify_within_allowed_roots(&valid_path) {
+            return FsMkdirResponse {
+                request_id: req.request_id.clone(),
+                created_path: req.path.clone(),
+                status: "ERROR".to_string(),
+                error: Some(err.to_string()),
+            };
+        }
 
         match fs::create_dir_all(&valid_path) {
             Ok(()) => FsMkdirResponse {
@@ -217,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mkdir_security_rejection() {
+    fn test_mkdir_security_rejection_and_whitelist() {
         let handler = FsRpcHandler::new("test_dev".to_string());
         let res = handler.handle_mkdir(&FsMkdirRequest {
             request_id: "req1".to_string(),
@@ -226,5 +297,17 @@ mod tests {
         });
         assert_eq!(res.status, "ERROR");
         assert!(res.error.unwrap().contains("SECURITY_REJECTED"));
+
+        let wl_handler = FsRpcHandler::with_allowed_roots(
+            "test_dev".to_string(),
+            vec![PathBuf::from("/tmp/allowed_workspace")],
+        );
+        let res_outside = wl_handler.handle_mkdir(&FsMkdirRequest {
+            request_id: "req2".to_string(),
+            target_device_id: "test_dev".to_string(),
+            path: "/tmp/forbidden_workspace/dir".to_string(),
+        });
+        assert_eq!(res_outside.status, "ERROR");
+        assert!(res_outside.error.unwrap().contains("allowed_roots"));
     }
 }

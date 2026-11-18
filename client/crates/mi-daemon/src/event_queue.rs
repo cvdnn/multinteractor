@@ -1,6 +1,8 @@
 //! 本地接收事件缓存环形队列 (`EventCacheList`，默认容量 50 条) (FR-COPY-02).
 
 use std::collections::VecDeque;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use mi_protocol::digest::DigestError;
 use mi_protocol::envelope::{CloudEventEnvelope, ContentCategory};
@@ -9,6 +11,7 @@ use mi_protocol::envelope::{CloudEventEnvelope, ContentCategory};
 pub struct EventCacheList {
     capacity: usize,
     inner: Arc<RwLock<VecDeque<CloudEventEnvelope>>>,
+    snapshot_path: Option<PathBuf>,
 }
 
 impl EventCacheList {
@@ -16,6 +19,38 @@ impl EventCacheList {
         Self {
             capacity: capacity.max(1),
             inner: Arc::new(RwLock::new(VecDeque::with_capacity(capacity.max(1)))),
+            snapshot_path: None,
+        }
+    }
+
+    pub fn with_persistence(capacity: usize, snapshot_path: PathBuf) -> Self {
+        let cap = capacity.max(1);
+        let mut initial = VecDeque::with_capacity(cap);
+        if let Ok(raw) = fs::read_to_string(&snapshot_path) {
+            if let Ok(items) = serde_json::from_str::<Vec<CloudEventEnvelope>>(&raw) {
+                for item in items.into_iter().take(cap) {
+                    initial.push_back(item);
+                }
+            }
+        }
+        Self {
+            capacity: cap,
+            inner: Arc::new(RwLock::new(initial)),
+            snapshot_path: Some(snapshot_path),
+        }
+    }
+
+    fn persist_snapshot(&self, queue: &VecDeque<CloudEventEnvelope>) {
+        if let Some(ref path) = self.snapshot_path {
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&queue.iter().collect::<Vec<_>>()) {
+                let tmp = path.with_extension("json.tmp");
+                if fs::write(&tmp, json).is_ok() {
+                    let _ = fs::rename(&tmp, path);
+                }
+            }
         }
     }
 
@@ -36,7 +71,14 @@ impl EventCacheList {
             guard.pop_back();
         }
         guard.push_front(envelope);
+        self.persist_snapshot(&guard);
         Ok(())
+    }
+
+    pub fn clear(&self) {
+        let mut guard = self.inner.write().expect("event queue lock poisoned");
+        guard.clear();
+        self.persist_snapshot(&guard);
     }
 
     pub fn latest(&self) -> Option<CloudEventEnvelope> {
