@@ -120,6 +120,26 @@ impl OsPlatformAdapter for LinuxPlatformAdapter {
         if self.simulated_image_bytes.is_some() {
             return Ok(self.simulated_image_bytes.clone());
         }
+        if cfg!(target_os = "linux") {
+            let candidates: &[(&str, &[&str])] = if Self::is_wayland() {
+                &[
+                    ("wl-paste", &["--no-newline", "--type", "image/png"]),
+                    ("xclip", &["-selection", "clipboard", "-t", "image/png", "-o"]),
+                ]
+            } else {
+                &[
+                    ("xclip", &["-selection", "clipboard", "-t", "image/png", "-o"]),
+                    ("wl-paste", &["--no-newline", "--type", "image/png"]),
+                ]
+            };
+            for (prog, args) in candidates {
+                if let Ok(out) = Command::new(prog).args(*args).output() {
+                    if out.status.success() && !out.stdout.is_empty() {
+                        return Ok(Some(out.stdout));
+                    }
+                }
+            }
+        }
         Ok(None)
     }
 

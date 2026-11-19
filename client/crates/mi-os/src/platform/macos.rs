@@ -13,9 +13,15 @@ pub struct MacOsPlatformAdapter {
 }
 
 impl MacOsPlatformAdapter {
+    fn utf8_command(program: &str) -> Command {
+        let mut cmd = Command::new(program);
+        cmd.env("LANG", "en_US.UTF-8").env("LC_CTYPE", "UTF-8");
+        cmd
+    }
+
     /// 通过 macOS AppleScript (`osascript`) 探测当前前台应用名称、Finder 当前打开目录及选中项路径.
     fn query_macos_frontmost_context() -> anyhow::Result<FocusedWindowContext> {
-        let app_out = Command::new("osascript")
+        let app_out = Self::utf8_command("osascript")
             .args([
                 "-e",
                 r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
@@ -24,7 +30,7 @@ impl MacOsPlatformAdapter {
         let app_name = String::from_utf8_lossy(&app_out.stdout).trim().to_string();
 
         if app_name.eq_ignore_ascii_case("Finder") {
-            let dir_out = Command::new("osascript")
+            let dir_out = Self::utf8_command("osascript")
                 .args([
                     "-e",
                     r#"tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as alias)"#,
@@ -37,7 +43,7 @@ impl MacOsPlatformAdapter {
                 PathBuf::from(current_dir_str)
             };
 
-            let sel_out = Command::new("osascript")
+            let sel_out = Self::utf8_command("osascript")
                 .args([
                     "-e",
                     r#"tell application "Finder"
@@ -99,7 +105,7 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
         }
         if cfg!(target_os = "macos") {
             // Query AXSelectedText via Accessibility without overwriting system pasteboard
-            let ax_out = Command::new("osascript")
+            let ax_out = Self::utf8_command("osascript")
                 .args([
                     "-e",
                     r#"tell application "System Events"
@@ -119,7 +125,7 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
                     }
                 }
             }
-            let output = Command::new("pbpaste").output()?;
+            let output = Self::utf8_command("pbpaste").output()?;
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout).to_string();
                 if !text.is_empty() {
@@ -134,6 +140,83 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
         if self.simulated_image_bytes.is_some() {
             return Ok(self.simulated_image_bytes.clone());
         }
+        if cfg!(target_os = "macos") {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let pid = std::process::id();
+            let png_path = std::env::temp_dir().join(format!("mi_clip_{}_{}.png", pid, unique));
+            let tiff_path = std::env::temp_dir().join(format!("mi_clip_{}_{}.tiff", pid, unique));
+            let png_escaped = png_path.to_string_lossy().replace('"', "\\\"");
+            let tiff_escaped = tiff_path.to_string_lossy().replace('"', "\\\"");
+
+            let script = format!(
+                r#"try
+    set imgData to the clipboard as «class PNGf»
+    set fRef to open for access (POSIX file "{png}") with write permission
+    set eof of fRef to 0
+    write imgData to fRef
+    close access fRef
+    return "PNG"
+on error
+    try
+        close access (POSIX file "{png}")
+    end try
+    try
+        set imgData to the clipboard as TIFF picture
+        set fRef to open for access (POSIX file "{tiff}") with write permission
+        set eof of fRef to 0
+        write imgData to fRef
+        close access fRef
+        return "TIFF"
+    on error
+        try
+            close access (POSIX file "{tiff}")
+        end try
+        return "NONE"
+    end try
+end try"#,
+                png = png_escaped,
+                tiff = tiff_escaped
+            );
+
+            let output = Self::utf8_command("osascript").args(["-e", &script]).output();
+            let result = if let Ok(out) = output {
+                let kind = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if kind == "PNG" && png_path.exists() {
+                    std::fs::read(&png_path).ok().filter(|b| !b.is_empty())
+                } else if kind == "TIFF" && tiff_path.exists() {
+                    let sips_ok = Self::utf8_command("sips")
+                        .args([
+                            "-s",
+                            "format",
+                            "png",
+                            &tiff_path.to_string_lossy(),
+                            "--out",
+                            &png_path.to_string_lossy(),
+                        ])
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false);
+                    if sips_ok && png_path.exists() {
+                        std::fs::read(&png_path).ok().filter(|b| !b.is_empty())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let _ = std::fs::remove_file(&png_path);
+            let _ = std::fs::remove_file(&tiff_path);
+            if result.is_some() {
+                return Ok(result);
+            }
+        }
         Ok(None)
     }
 
@@ -146,7 +229,7 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
                 r#"POSIX path of (choose folder with prompt "选择保存 {} 的目标目录 (multinteractor):")"#,
                 default_file_name.replace('"', "\\\"")
             );
-            let output = Command::new("osascript").args(["-e", &script]).output()?;
+            let output = Self::utf8_command("osascript").args(["-e", &script]).output()?;
             if output.status.success() {
                 let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 if !p.is_empty() {
@@ -168,7 +251,7 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
         if cfg!(target_os = "macos") {
             use std::io::Write;
             use std::process::Stdio;
-            let mut child = Command::new("pbcopy")
+            let mut child = Self::utf8_command("pbcopy")
                 .stdin(Stdio::piped())
                 .spawn()?;
             if let Some(mut stdin) = child.stdin.take() {
@@ -178,7 +261,7 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
             if !status.success() {
                 anyhow::bail!("pbcopy failed with status: {}", status);
             }
-            let _ = Command::new("osascript")
+            let _ = Self::utf8_command("osascript")
                 .args([
                     "-e",
                     r#"tell application "System Events" to keystroke "v" using command down"#,
@@ -186,6 +269,23 @@ impl OsPlatformAdapter for MacOsPlatformAdapter {
                 .output();
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_utf8_command_sets_utf8_locale() {
+        let cmd = MacOsPlatformAdapter::utf8_command("pbpaste");
+        let envs: Vec<_> = cmd.get_envs().collect();
+        assert!(envs
+            .iter()
+            .any(|(k, v)| k == &"LANG" && v == &Some("en_US.UTF-8".as_ref())));
+        assert!(envs
+            .iter()
+            .any(|(k, v)| k == &"LC_CTYPE" && v == &Some("UTF-8".as_ref())));
     }
 }
 

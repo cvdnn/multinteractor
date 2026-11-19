@@ -483,9 +483,19 @@ impl MultinteractorApp {
                                     .copy_path(&first.to_string_lossy())
                             }
                             CapturedSelection::ImageBytes(bytes) => {
-                                let tmp = std::env::temp_dir().join("mi_clipboard_image.png");
+                                let ts = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis())
+                                    .unwrap_or(0);
+                                let tmp = std::env::temp_dir()
+                                    .join(format!("mi_clipboard_{}.png", ts));
                                 std::fs::write(&tmp, &bytes)?;
-                                daemon.lock().unwrap().copy_path(&tmp.to_string_lossy())
+                                let copy_res = daemon
+                                    .lock()
+                                    .unwrap()
+                                    .copy_path(&tmp.to_string_lossy());
+                                let _ = std::fs::remove_file(&tmp);
+                                copy_res
                             }
                         })
                     }

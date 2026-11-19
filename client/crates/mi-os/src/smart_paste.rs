@@ -35,7 +35,7 @@ impl<P: OsPlatformAdapter> SmartPasteRouter<P> {
     pub fn route_alt_v(&self, latest_event: &CloudEventEnvelope) -> anyhow::Result<SmartPasteDecision> {
         let focus = self.platform.inspect_focused_window()?;
         match latest_event.payload.content_category {
-            ContentCategory::Text | ContentCategory::Image => {
+            ContentCategory::Text => {
                 let text = latest_event
                     .payload
                     .inline_data
@@ -48,13 +48,31 @@ impl<P: OsPlatformAdapter> SmartPasteRouter<P> {
                     content_hash: latest_event.payload.digest.full_hash.clone(),
                 })
             }
-            ContentCategory::File | ContentCategory::Directory => {
+            ContentCategory::Image if latest_event.payload.inline_data.is_some() => {
+                let text = latest_event
+                    .payload
+                    .inline_data
+                    .clone()
+                    .unwrap_or_default();
+                latest_event.payload.digest.verify_bytes(text.as_bytes())?;
+                Ok(SmartPasteDecision::PasteTextIntoEditor {
+                    text,
+                    content_hash: latest_event.payload.digest.full_hash.clone(),
+                })
+            }
+            ContentCategory::Image | ContentCategory::File | ContentCategory::Directory => {
+                let fallback_name = if latest_event.payload.content_category == ContentCategory::Image
+                {
+                    "clipboard_image.png"
+                } else {
+                    "downloaded_item"
+                };
                 let default_name = latest_event
                     .payload
                     .items_meta
                     .first()
                     .map(|m| m.name.clone())
-                    .unwrap_or_else(|| "downloaded_item".to_string());
+                    .unwrap_or_else(|| fallback_name.to_string());
 
                 match focus {
                     FocusedWindowContext::FileManager { current_dir, .. } => {
@@ -184,6 +202,27 @@ mod tests {
             SmartPasteDecision::ShowNativeSaveAsDialog {
                 event_id: "evt_paste_01".to_string(),
                 default_item_name: "课程资料".to_string(),
+                chosen_dir: Some(PathBuf::from("/Users/test/Desktop")),
+            }
+        );
+
+        // 4. Image (file_cache_id, inline_data=None) in FileManager -> DirectSaveToFolder
+        let img_env = sample_envelope(ContentCategory::Image, None, "screenshot.png");
+        assert_eq!(
+            router_fm.route_alt_v(&img_env).unwrap(),
+            SmartPasteDecision::DirectSaveToFolder {
+                event_id: "evt_paste_01".to_string(),
+                target_dir: PathBuf::from("/Users/test/Downloads"),
+                item_name: "screenshot.png".to_string(),
+            }
+        );
+
+        // 5. Image (file_cache_id, inline_data=None) in TextEditor -> ShowNativeSaveAsDialog
+        assert_eq!(
+            router_dlg.route_alt_v(&img_env).unwrap(),
+            SmartPasteDecision::ShowNativeSaveAsDialog {
+                event_id: "evt_paste_01".to_string(),
+                default_item_name: "screenshot.png".to_string(),
                 chosen_dir: Some(PathBuf::from("/Users/test/Desktop")),
             }
         );

@@ -13,7 +13,12 @@ pub struct WindowsPlatformAdapter {
 }
 
 impl WindowsPlatformAdapter {
+    const PS_UTF8_PREFIX: &'static str =
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; ";
+
     pub const EXPLORER_COM_PS_SCRIPT: &'static str = r#"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $fg = (Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();' -Name Win32 -Namespace Native -PassThru)::GetForegroundWindow()
 $shell = New-Object -ComObject Shell.Application
 foreach ($win in $shell.Windows()) {
@@ -35,6 +40,8 @@ foreach ($win in $shell.Windows()) {
 "#;
 
     pub const FOLDER_DIALOG_PS_SCRIPT: &'static str = r#"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
 $dlg.Description = "选择跨设备文件保存目录 (multinteractor)"
@@ -44,6 +51,8 @@ if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 "#;
 
     pub const UIA_SELECTED_TEXT_PS_SCRIPT: &'static str = r#"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName UIAutomationClient
 $elem = [System.Windows.Automation.AutomationElement]::FocusedElement
 if ($null -ne $elem) {
@@ -59,6 +68,17 @@ if ($null -ne $elem) {
         }
     }
 }
+"#;
+
+    pub const CLIPBOARD_PASTE_PS_SCRIPT: &'static str = r#"
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$reader = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), [System.Text.Encoding]::UTF8)
+$txt = $reader.ReadToEnd()
+Add-Type -AssemblyName System.Windows.Forms
+if (-not [string]::IsNullOrEmpty($txt)) {
+    [System.Windows.Forms.Clipboard]::SetText($txt)
+}
+[System.Windows.Forms.SendKeys]::SendWait('^v')
 "#;
 
     /// 通过 Windows Shell.Application COM 接口探测当前活动 Explorer 窗口路径与选中文件列表.
@@ -135,9 +155,10 @@ impl OsPlatformAdapter for WindowsPlatformAdapter {
                 }
             }
 
-            // 2. 回退读取系统剪贴板
+            // 2. 回退读取系统剪贴板（强制 UTF-8 输出避免中文 Windows CP936/GBK 乱码）
+            let clip_cmd = format!("{}Get-Clipboard -Raw", Self::PS_UTF8_PREFIX);
             let output = Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"])
+                .args(["-NoProfile", "-NonInteractive", "-Command", &clip_cmd])
                 .output()?;
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout).to_string();
@@ -152,6 +173,34 @@ impl OsPlatformAdapter for WindowsPlatformAdapter {
     fn read_clipboard_image_bytes(&self) -> anyhow::Result<Option<Vec<u8>>> {
         if self.simulated_image_bytes.is_some() {
             return Ok(self.simulated_image_bytes.clone());
+        }
+        if cfg!(target_os = "windows") {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let tmp_path = std::env::temp_dir()
+                .join(format!("mi_clip_{}_{}.png", std::process::id(), unique));
+            let escaped = tmp_path.to_string_lossy().replace('\'', "''");
+            let script = format!(
+                "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img -ne $null) {{ $img.Save('{escaped}', [System.Drawing.Imaging.ImageFormat]::Png); 'OK' }}"
+            );
+            let output = Command::new("powershell")
+                .args(["-NoProfile", "-Sta", "-Command", &script])
+                .output();
+            let result = if let Ok(out) = output {
+                if out.status.success() && tmp_path.exists() {
+                    std::fs::read(&tmp_path).ok().filter(|b| !b.is_empty())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let _ = std::fs::remove_file(&tmp_path);
+            if result.is_some() {
+                return Ok(result);
+            }
         }
         Ok(None)
     }
@@ -180,15 +229,33 @@ impl OsPlatformAdapter for WindowsPlatformAdapter {
     }
 
     fn write_text_to_clipboard_and_paste(&self, text: &str) -> anyhow::Result<()> {
+        if self.simulated_focus.is_some()
+            || self.simulated_selected_text.is_some()
+            || self.simulated_image_bytes.is_some()
+            || self.simulated_dialog_dir.is_some()
+        {
+            return Ok(());
+        }
         if cfg!(target_os = "windows") {
-            let escaped = text.replace('\'', "''");
-            let script = format!(
-                "Set-Clipboard -Value '{}'; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')",
-                escaped
-            );
-            let _ = Command::new("powershell")
-                .args(["-NoProfile", "-Sta", "-Command", &script])
-                .output();
+            use std::io::Write;
+            use std::process::Stdio;
+            let mut child = Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Sta",
+                    "-Command",
+                    Self::CLIPBOARD_PASTE_PS_SCRIPT,
+                ])
+                .stdin(Stdio::piped())
+                .spawn()?;
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin.write_all(text.as_bytes())?;
+            }
+            let status = child.wait()?;
+            if !status.success() {
+                anyhow::bail!("powershell clipboard paste failed with status: {}", status);
+            }
         }
         Ok(())
     }
@@ -202,9 +269,15 @@ mod tests {
     fn test_powershell_scripts_have_valid_variable_syntax() {
         assert!(!WindowsPlatformAdapter::EXPLORER_COM_PS_SCRIPT.contains("$ "));
         assert!(!WindowsPlatformAdapter::FOLDER_DIALOG_PS_SCRIPT.contains("$ "));
+        assert!(!WindowsPlatformAdapter::UIA_SELECTED_TEXT_PS_SCRIPT.contains("$ "));
+        assert!(!WindowsPlatformAdapter::CLIPBOARD_PASTE_PS_SCRIPT.contains("$ "));
         assert!(WindowsPlatformAdapter::EXPLORER_COM_PS_SCRIPT.contains("$fg"));
         assert!(WindowsPlatformAdapter::EXPLORER_COM_PS_SCRIPT.contains("$shell"));
         assert!(WindowsPlatformAdapter::FOLDER_DIALOG_PS_SCRIPT.contains("$dlg"));
+        assert!(WindowsPlatformAdapter::EXPLORER_COM_PS_SCRIPT.contains("Encoding]::UTF8"));
+        assert!(WindowsPlatformAdapter::FOLDER_DIALOG_PS_SCRIPT.contains("Encoding]::UTF8"));
+        assert!(WindowsPlatformAdapter::UIA_SELECTED_TEXT_PS_SCRIPT.contains("Encoding]::UTF8"));
+        assert!(WindowsPlatformAdapter::CLIPBOARD_PASTE_PS_SCRIPT.contains("Encoding]::UTF8"));
     }
 }
 
